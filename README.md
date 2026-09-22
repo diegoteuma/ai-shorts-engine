@@ -79,17 +79,22 @@ com.aishorts.engine
 │                   Story final con las duraciones ya calculadas.
 │
 ├── higgsfield/     HiggsfieldClient (interfaz) y HiggsfieldRestClient (la
-│                   implementación real, con java.net.http). Separa estimate
-│                   de generate: son dos llamadas distintas, nunca una sola.
-│                   duration va como parámetro estructurado de la llamada
-│                   (igual que aspect_ratio), nunca como texto del prompt.
-│                   Los nombres de campo de la respuesta (cost, request_id,
-│                   status_url, ...) están escritos de forma tolerante
-│                   porque la documentación pública no publica el esquema
-│                   JSON exacto por modelo — hay que confirmarlos contra la
-│                   página del modelo elegido para el piloto antes de usar
-│                   esto con credenciales reales (están todos aislados en
-│                   HiggsfieldRestClient para que ese ajuste sea acotado).
+│                   implementación real, con java.net.http). Confirmado
+│                   contra el spec público (docs.higgsfield.ai/docs/openapi.json):
+│                   NO existe ningún endpoint de estimate real, así que
+│                   estimateCost calcula el costo localmente (ModelPricing +
+│                   DurationPolicy, cargados en KnownHiggsfieldPricing —
+│                   $/segundo y duraciones permitidas por modelo, enum fijo
+│                   o rango continuo según el modelo) en vez de pegarle a la
+│                   red. pollStatus lee el asset final anidado en
+│                   video.url (nunca un campo plano) e interpreta
+│                   explícitamente los 6 status reales (queued, in_progress,
+│                   nsfw, failed, completed, canceled) — nsfw/canceled
+│                   terminan la escena en FAILED, nunca quedan poleados
+│                   indefinidamente. duration va como parámetro estructurado
+│                   de la llamada (igual que aspect_ratio), nunca como texto
+│                   del prompt; Kling 3.0 Standard (PREMIUM) además necesita
+│                   "sound": "off" o factura audio que después se descarta.
 │
 ├── approval/       StoryApprovalService: el orquestador de las dos puertas
 │                   humanas, siempre por lote (la historia completa, no
@@ -100,8 +105,9 @@ com.aishorts.engine
 │                     2. synthesizeNarrationForApprovedScenes → TTS real, duración
 │                        pasa de estimada a la del audio (puede sacar la historia
 │                        del presupuesto de tiempo — revisar antes de seguir)
-│                     3. estimateCostsForApprovedScenes → consulta a Higgsfield
-│                        (usa la duración YA REAL como parámetro)
+│                     3. estimateCostsForApprovedScenes → calcula el costo
+│                        (local, ver higgsfield/ arriba; usa la duración YA
+│                        REAL como parámetro)
 │                     4. applyCostDecisions     → PUERTA 2, aprobás/rechazás el lote
 │                     5. generateApprovedScenes → el ÚNICO método que gasta y genera
 │                   Un rechazo en una escena nunca bloquea a las demás del lote.
@@ -189,13 +195,15 @@ falló si algo sale mal:
    y quema la pista `.srt` en español encima (`subtitles=...`, requiere
    `libass` — confirmado que el ffmpeg de este sandbox lo tiene compilado).
 
-Esto se probó de verdad, no solo compilando: se generaron clips y audios
-sintéticos con `ffmpeg -f lavfi` (colores sólidos + tonos senoidales), se
-sirvieron por un servidor HTTP local para ejercitar `AssetDownloader` de
-punta a punta, y se corrió `VideoMontageBuilder.build(...)` real contra
-`Scene`/`Story` reales — no un script de shell aparte. Salió un .mp4 de
-1080x1920 con los subtítulos (con tildes y ñ) quemados correctamente
-(verificado extrayendo un frame y mirándolo).
+Esto se probó de verdad, no solo compilando: `VideoMontageBuilderFfmpegTest`
+(paquete `montage/`, en `src/test`) genera clips y audios sintéticos con
+`ffmpeg -f lavfi` (colores sólidos + tonos senoidales), los sirve por un
+servidor HTTP local para ejercitar `AssetDownloader` de punta a punta, y
+corre `VideoMontageBuilder.build(...)` real contra `Scene`/`Story` reales —
+no un script de shell aparte. Confirma que sale un .mp4 de 1080x1920 (vía
+`ffprobe`) y cubre específicamente el caso de la comilla simple de más
+abajo. Necesita ffmpeg/ffprobe instalados, así que está deshabilitado por
+default — correr con `RUN_FFMPEG_TESTS=true mvn test` (ver "Tests" abajo).
 
 Un hallazgo concreto de esa prueba: el filtro `subtitles=` de ffmpeg
 re-parsea su propio argumento `filename` con una segunda pasada de escapeo,
@@ -253,13 +261,14 @@ el cambio: la única clase a reemplazar es `JsonFileStoryRepository`, por
 una implementación con Spring Data JPA (SQLite/Postgres) — agregar
 `spring-data-jpa` ya no tiene ninguna barrera de red.
 
-Se probó de punta a punta, no solo compilando: un test creó una historia,
-la llevó a través de las dos puertas y la generación completa vía la API
-REST (ver abajo), cerró el servidor, abrió una instancia NUEVA de
-`JsonFileStoryRepository` apuntando al mismo directorio (simulando que el
-proceso se reinició) y confirmó que la historia se releía con exactamente
-el mismo estado — las 6 escenas generadas, con su audio y su asset de
-Higgsfield.
+Se probó de punta a punta, no solo compilando: `StoryApiPersistenceRestartTest`
+(paquete `demo/`, en `src/test`) crea una historia, la lleva a través de las
+dos puertas y la generación completa vía la API REST real (`@SpringBootTest`,
+`TestRestTemplate`, con los `Fake*` inyectados en vez de los clientes reales
+— ver "Tests" abajo), abre una instancia NUEVA de `JsonFileStoryRepository`
+apuntando al mismo directorio (simulando que el proceso se reinició) y
+confirma que la historia se relee con exactamente el mismo estado — las 6
+escenas generadas, con su audio y su asset de Higgsfield.
 
 ## API REST (`api/`)
 
@@ -342,10 +351,31 @@ mvn spring-boot:run
 ```
 
 Se probó de punta a punta contra los mismos `Fake*` del demo (sin red real,
-sin gastar) pero con persistencia en disco de verdad: crear una historia,
-llevarla a través de las dos puertas, generar, y releerla desde una
-instancia nueva del repositorio simulando un reinicio del proceso — las 6
-escenas volvieron con exactamente el mismo estado.
+sin gastar) pero con persistencia en disco de verdad — ver
+`StoryApiPersistenceRestartTest` en "Persistencia" arriba y "Tests" abajo.
+
+## Tests
+
+```bash
+mvn test                       # todo salvo el test de ffmpeg (ver abajo)
+RUN_FFMPEG_TESTS=true mvn test # suite completa, necesita ffmpeg/ffprobe instalados
+```
+
+- `domain/SceneTest.java`, `domain/StoryTest.java`: los guards de las dos
+  puertas humanas (`IllegalStateException` fuera de orden), el camino feliz
+  completo con snapshot/restore, y `Story.totalTargetDuration()`/
+  `isWithinDurationBudget()`/`status()`.
+- `higgsfield/HiggsfieldRestClientTest.java`: las tres correcciones contra
+  el spec real de Higgsfield (estimateCost local sin red, `video.url`
+  anidado, los 6 status reales incluido nsfw/canceled → FAILED) y el fix de
+  `"sound": "off"` — contra un `HttpServer` local real, no mocks.
+- `montage/VideoMontageBuilderFfmpegTest.java`: ffmpeg real contra medios
+  sintéticos (ver "Montaje/quemado" arriba). Deshabilitado por default
+  (`@EnabledIfEnvironmentVariable`) porque necesita ffmpeg/ffprobe instalados.
+- `demo/StoryApiPersistenceRestartTest.java`: la API REST completa de punta
+  a punta vía HTTP real (`@SpringBootTest`), con los `Fake*` inyectados por
+  `@Primary` en vez de los clientes reales, más el reinicio de persistencia
+  simulado (ver "Persistencia" arriba).
 
 ## Pendiente / próximos pasos
 
@@ -354,9 +384,6 @@ escenas volvieron con exactamente el mismo estado.
   `NarrationDurationEstimator` (estimación por palabras) sigue existiendo
   para el borrador inicial, antes de la puerta 1 — recién después de
   aprobar el prompt se sintetiza audio real y la duración se refina.
-- Confirmar los nombres de campo exactos de la respuesta de Higgsfield
-  (estimate y generate) contra el modelo real elegido para el piloto, y
-  ajustar los métodos `extract*()` de `HiggsfieldRestClient` si hace falta.
 - Confirmar el identificador de modelo de Claude vigente en `ClaudeConfig`
   contra docs.claude.com antes de desplegar.
 - Definir aspect_ratio/resolution reales si van a variar por escena o por
