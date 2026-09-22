@@ -44,7 +44,7 @@ public final class ClaudeScriptDraftingService implements ScriptDraftingService 
         try {
             rawText = client.sendMessage(systemPrompt, userMessage);
         } catch (ClaudeApiException e) {
-            throw new ScriptDraftingException("Error llamando a la API de Claude para el guion", e);
+            throw new ScriptDraftingException("Error llamando a la API de Claude para el guion: " + e.getMessage(), e);
         }
         return parseScenes(rawText, brief);
     }

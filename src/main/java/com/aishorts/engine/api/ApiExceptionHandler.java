@@ -6,6 +6,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Traduce las excepciones de la capa de API a respuestas HTTP, igual que el viejo ApiServer.handle(). */
@@ -25,6 +26,24 @@ class ApiExceptionHandler {
     @ExceptionHandler(RuntimeException.class)
     ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException e) {
         String message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", message));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", message);
+        String rootCauseMessage = rootCauseMessage(e);
+        if (rootCauseMessage != null) {
+            body.put("cause", rootCauseMessage);
+        }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+    }
+
+    /** Mensaje de la causa raíz (recorriendo getCause() hasta el final), o null si no aporta nada nuevo. */
+    private static String rootCauseMessage(Throwable e) {
+        Throwable root = e;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        if (root == e || root.getMessage() == null || root.getMessage().equals(e.getMessage())) {
+            return null;
+        }
+        return root.getMessage();
     }
 }
