@@ -1,0 +1,32 @@
+server:
+  port: ${API_PORT:8080}
+
+spring:
+  application:
+    name: ai-shorts-engine
+
+# Todo lo que EngineConfiguration lee con @Value, documentado en un solo
+# lugar. Cada valor delega a una variable de entorno de nombre distinto
+# (${CLAUDE_API_KEY}, etc.) -- OJO: nunca "clave: ${misma-clave}", porque
+# Spring lo detecta como una referencia circular y el arranque falla (ya
+# pasó una vez armando esto). Las credenciales quedan sin default a
+# propósito: si falta alguna, el arranque falla con un mensaje claro en vez
+# de arrancar con un valor vacío.
+claude:
+  api-key: ${CLAUDE_API_KEY}
+  model: claude-sonnet-5
+
+higgsfield:
+  base-url: ${HIGGSFIELD_BASE_URL}
+  api-key-id: ${HIGGSFIELD_API_KEY_ID}
+  api-key-secret: ${HIGGSFIELD_API_KEY_SECRET}
+  model-standard: ${HIGGSFIELD_MODEL_STANDARD}
+  model-premium: ${HIGGSFIELD_MODEL_PREMIUM}
+
+elevenlabs:
+  api-key: ${ELEVENLABS_API_KEY}
+  voice-id: K3TeN3ZVK8WnOeJ0NYqZ
+
+engine:
+  data-dir: ${DATA_DIR:./data/stories}
+  audio-dir: ${AUDIO_DIR:./data/audio}
