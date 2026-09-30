@@ -18,6 +18,6 @@ public record ClaudeConfig(String apiKey, String model, String baseUrl, int maxT
     }
 
     public static ClaudeConfig of(String apiKey, String model) {
-        return new ClaudeConfig(apiKey, model, "https://api.anthropic.com", 4096);
+        return new ClaudeConfig(apiKey, model, "https://api.anthropic.com", 16000);
     }
 }

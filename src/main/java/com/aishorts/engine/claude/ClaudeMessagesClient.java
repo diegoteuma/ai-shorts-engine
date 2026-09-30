@@ -59,11 +59,13 @@ public final class ClaudeMessagesClient {
             if (!(contentObj instanceof List<?> contentList) || contentList.isEmpty()) {
                 throw new ClaudeApiException("La respuesta de Claude no trae 'content'. Cruda: " + response.body());
             }
-            Object firstBlock = contentList.get(0);
-            if (!(firstBlock instanceof Map<?, ?> block) || !(block.get("text") instanceof String text)) {
-                throw new ClaudeApiException("El primer bloque de 'content' no tiene texto. Cruda: " + response.body());
+            for (Object entry : contentList) {
+                if (entry instanceof Map<?, ?> block && "text".equals(block.get("type"))
+                        && block.get("text") instanceof String text) {
+                    return text;
+                }
             }
-            return text;
+            throw new ClaudeApiException("Ningún bloque de 'content' es de tipo texto. Cruda: " + response.body());
         } catch (IOException e) {
             throw new ClaudeApiException("Error de red llamando a la API de Claude", e);
         } catch (InterruptedException e) {
