@@ -286,9 +286,17 @@ public final class StoryApprovalService {
         // TODO: aspect_ratio y resolution quedan hardcodeados a los valores
         // del piloto (vertical 9:16) hasta que se decida si van a variar por
         // escena o por historia.
+        //
+        // roundUpToAllowedDuration es obligatorio acá: modelos con
+        // DurationPolicy.DiscreteValues (STANDARD: solo 5 o 10) rechazan con
+        // 400 cualquier otro valor, así que la duración cruda de la escena
+        // (7, 8, ...) nunca puede llegar tal cual a Higgsfield.
+        long requestedSeconds = secondsRoundedUp(scene.targetDuration());
+        long allowedSeconds = higgsfieldConfig.pricingFor(modelId).roundUpToAllowedDuration(requestedSeconds);
+
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("prompt", scene.visualPrompt());
-        parameters.put("duration", secondsRoundedUp(scene.targetDuration()));
+        parameters.put("duration", allowedSeconds);
         parameters.put("aspect_ratio", "9:16");
 
         // Kling 3.0 Standard (PREMIUM) genera audio propio salvo que se le

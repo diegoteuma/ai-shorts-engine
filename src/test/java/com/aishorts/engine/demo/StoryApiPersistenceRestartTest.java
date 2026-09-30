@@ -5,6 +5,7 @@ import com.aishorts.engine.domain.GenerationStatus;
 import com.aishorts.engine.domain.Story;
 import com.aishorts.engine.duration.WordsPerSecondDurationEstimator;
 import com.aishorts.engine.higgsfield.HiggsfieldClient;
+import com.aishorts.engine.higgsfield.KnownHiggsfieldPricing;
 import com.aishorts.engine.persistence.JsonFileStoryRepository;
 import com.aishorts.engine.persistence.StoryRepository;
 import com.aishorts.engine.script.ScriptDraftingService;
@@ -68,8 +69,14 @@ class StoryApiPersistenceRestartTest {
         registry.add("HIGGSFIELD_BASE_URL", () -> "https://higgsfield.invalid");
         registry.add("HIGGSFIELD_API_KEY_ID", () -> "test-id");
         registry.add("HIGGSFIELD_API_KEY_SECRET", () -> "test-secret");
-        registry.add("HIGGSFIELD_MODEL_STANDARD", () -> "higgsfield-ai/soul/standard");
-        registry.add("HIGGSFIELD_MODEL_PREMIUM", () -> "higgsfield-ai/soul-premium/cinema");
+        // A diferencia de las credenciales, estos dos SÍ importan: HiggsfieldConfig
+        // (el bean real, nunca reemplazado por un Fake) usa KnownHiggsfieldPricing.defaults()
+        // para su pricingByModelId, así que el modelCatalog tiene que apuntar
+        // exactamente a esos literales para que pricingFor(modelId) los encuentre
+        // (StoryApprovalService#buildGenerationParameters ya lo llama para redondear
+        // la duración al valor permitido, incluso con FakeHiggsfieldClient).
+        registry.add("HIGGSFIELD_MODEL_STANDARD", () -> KnownHiggsfieldPricing.STANDARD_MODEL_ID);
+        registry.add("HIGGSFIELD_MODEL_PREMIUM", () -> KnownHiggsfieldPricing.PREMIUM_MODEL_ID);
         registry.add("ELEVENLABS_API_KEY", () -> "test-elevenlabs-key");
         registry.add("ELEVENLABS_VOICE_ID", () -> "test-voice");
     }
