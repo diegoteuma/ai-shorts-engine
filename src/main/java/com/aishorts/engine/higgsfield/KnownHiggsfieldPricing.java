@@ -2,9 +2,7 @@ package com.aishorts.engine.higgsfield;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.TreeSet;
 
 /**
  * Tarifas de Higgsfield confirmadas contra su consola (no contra la API —
@@ -19,11 +17,9 @@ import java.util.TreeSet;
  */
 public final class KnownHiggsfieldPricing {
 
-    /** Kling 2.5 Turbo Pro — confirmado para el piloto. */
-    public static final String STANDARD_MODEL_ID = "kling-video/v2.5-turbo/pro/text-to-video";
+    public static final String STANDARD_MODEL_ID = "bytedance/seedance-2.0/text-to-video";
 
-    /** Kling 3.0 Standard — confirmado para el piloto. */
-    public static final String PREMIUM_MODEL_ID = "kling-video/v3.0/std/text-to-video";
+    public static final String PREMIUM_MODEL_ID = "bytedance/seedance-2.5/text-to-video";
 
     private KnownHiggsfieldPricing() {
     }
@@ -31,23 +27,30 @@ public final class KnownHiggsfieldPricing {
     public static Map<String, ModelPricing> defaults() {
         Map<String, ModelPricing> pricing = new LinkedHashMap<>();
 
-        // STANDARD — Kling 2.5 Turbo Pro. duration es un enum fijo: solo 5 o
-        // 10 (confirmado contra el schema real del modelo en el spec). No
-        // tiene un parámetro de audio propio (su schema solo acepta
-        // prompt/duration/cfg_scale/negative_prompt), así que no necesita el
-        // fix de "sound": "off" que sí necesita PREMIUM — ver
-        // StoryApprovalService#buildGenerationParameters.
+        // STANDARD — Seedance 2.0 Text to Video. duration continua 4-15s
+        // (confirmado contra la doc de la consola de Higgsfield, el spec
+        // público openapi.json ni siquiera lista este modelo). resolution se
+        // fija a "720p" en StoryApprovalService#buildGenerationParameters.
+        //
+        // TODO: pricePerSecond SIN CONFIRMAR para 720p específico — la consola
+        // solo publica el rango completo por resolución (480p-4k: $0.0985 -
+        // $1.0887/s), no el precio por resolución individual. Este valor solo
+        // afecta el estimado LOCAL que se muestra en la puerta 2
+        // (HiggsfieldRestClient#estimateCost no pega a la red), nunca lo que
+        // Higgsfield factura de verdad — confirmar corriendo una generación
+        // real mínima (duration=4) a 720p y leyendo el cargo real en el usage
+        // de Higgsfield, después reemplazar este placeholder.
         pricing.put(STANDARD_MODEL_ID, new ModelPricing(
-                new BigDecimal("0.021"),
-                new DurationPolicy.DiscreteValues(new TreeSet<>(List.of(5L, 10L))),
+                new BigDecimal("0.35"),
+                new DurationPolicy.ContinuousRange(4, 15),
                 "USD"));
 
-        // PREMIUM — Kling 3.0 Standard. duration es continua entre 3 y 15,
-        // sin enum fijo -- a diferencia de STANDARD, cualquier entero en ese
-        // rango es válido.
+        // PREMIUM — Seedance 2.5 Text to Video. duration continua 4-30s.
+        // TODO: mismo caveat de arriba (rango publicado 480p-1080p: $0.144 -
+        // $0.7961/s, nada específico de 720p).
         pricing.put(PREMIUM_MODEL_ID, new ModelPricing(
-                new BigDecimal("0.0714"),
-                new DurationPolicy.ContinuousRange(3, 15),
+                new BigDecimal("0.47"),
+                new DurationPolicy.ContinuousRange(4, 30),
                 "USD"));
 
         return pricing;

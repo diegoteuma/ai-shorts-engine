@@ -27,19 +27,19 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Cubre el caso real que rechazaba Higgsfield con 400 ("duration: 7 is not
- * one of [5, 10]"): buildGenerationParameters redondeaba targetDuration solo
- * al segundo entero (secondsRoundedUp), sin pasarlo por
+ * Cubre el caso real que rechazaba Higgsfield con 400 ("duration: X is not
+ * in the allowed range"): buildGenerationParameters redondeaba
+ * targetDuration solo al segundo entero (secondsRoundedUp), sin pasarlo por
  * HiggsfieldConfig.pricingFor(modelId).roundUpToAllowedDuration(...) — el
  * mismo método que HiggsfieldRestClient.estimateCost() ya usa correctamente
  * para calcular billedDurationSeconds, pero que nunca llegaba al parámetro
  * real que se manda a Higgsfield.
  *
- * STANDARD (Kling 2.5 Turbo Pro) solo admite duration 5 o 10
- * (DurationPolicy.DiscreteValues, ver KnownHiggsfieldPricing). Una escena con
- * targetDuration real de 7s (fijada vía attachNarrationAudio, no el
- * estimador por palabras) debe llegar a submitGeneration con duration=10, no
- * con el 7 crudo.
+ * STANDARD (Seedance 2.0) admite duration continua entre 4 y 15s
+ * (DurationPolicy.ContinuousRange, ver KnownHiggsfieldPricing). Una escena
+ * con targetDuration real de 2s (fijada vía attachNarrationAudio, no el
+ * estimador por palabras) -- por debajo del mínimo que admite el modelo --
+ * debe llegar a submitGeneration con duration=4, no con el 2 crudo.
  */
 class StoryApprovalServiceDurationTest {
 
@@ -61,9 +61,11 @@ class StoryApprovalServiceDurationTest {
         Scene scene = new Scene("scene-1", SceneRole.GANCHO, 1, "narración", "prompt", Duration.ofSeconds(1));
         scene.proposeTier(new TierRecommendation(GenerationTier.STANDARD, 20, "test"));
         scene.approvePrompt();
-        // targetDuration real del audio sintetizado: 7s -- ni 5 ni 10, el
-        // caso exacto que Higgsfield rechazaba.
-        scene.attachNarrationAudio("audio/scene-1.mp3", Duration.ofSeconds(7));
+        // targetDuration real del audio sintetizado: 2s -- por debajo del
+        // mínimo (4s) que admite Seedance 2.0, el caso real que importa: que
+        // el duration que llega a submitGeneration nunca sea menor al mínimo
+        // que el modelo acepta.
+        scene.attachNarrationAudio("audio/scene-1.mp3", Duration.ofSeconds(2));
         Story story = new Story("story-1", "topic", "title", List.of(scene));
 
         BatchResult estimateResult = approvalService.estimateCostsForApprovedScenes(story);
@@ -74,7 +76,7 @@ class StoryApprovalServiceDurationTest {
 
         assertThat(generateResult.failedSceneIds()).isEmpty();
         assertThat(generateResult.succeededSceneIds()).containsExactly("scene-1");
-        assertThat(client.lastSubmittedDuration).isEqualTo(10L);
+        assertThat(client.lastSubmittedDuration).isEqualTo(4L);
     }
 
     private static TtsService neverCalledTts() {
@@ -85,8 +87,8 @@ class StoryApprovalServiceDurationTest {
 
     /**
      * Fake mínimo que simula el rechazo real de Higgsfield (400
-     * "duration: X is not one of [5, 10]") cuando submitGeneration recibe
-     * una duración fuera del enum permitido para el modelo.
+     * "duration: X is not in the allowed range") cuando submitGeneration
+     * recibe una duración fuera del rango [4, 15] que admite Seedance 2.0.
      */
     private static final class RecordingHiggsfieldClient implements HiggsfieldClient {
         private long lastSubmittedDuration = -1;
@@ -99,8 +101,8 @@ class StoryApprovalServiceDurationTest {
         @Override
         public GenerationResponse submitGeneration(GenerationRequest request) {
             long duration = ((Number) request.parameters().get("duration")).longValue();
-            if (duration != 5L && duration != 10L) {
-                throw new HiggsfieldException("duration: " + duration + " is not one of [5, 10]");
+            if (duration < 4L || duration > 15L) {
+                throw new HiggsfieldException("duration: " + duration + " is not in the allowed range [4, 15]");
             }
             this.lastSubmittedDuration = duration;
             return new GenerationResponse("req-1", "http://higgsfield.invalid/requests/req-1/status", "queued");

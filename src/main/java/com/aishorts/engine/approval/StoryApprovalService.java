@@ -13,7 +13,6 @@ import com.aishorts.engine.higgsfield.GenerationResponse;
 import com.aishorts.engine.higgsfield.GenerationStatusResponse;
 import com.aishorts.engine.higgsfield.HiggsfieldClient;
 import com.aishorts.engine.higgsfield.HiggsfieldConfig;
-import com.aishorts.engine.higgsfield.KnownHiggsfieldPricing;
 import com.aishorts.engine.tts.TtsResult;
 import com.aishorts.engine.tts.TtsService;
 
@@ -284,13 +283,14 @@ public final class StoryApprovalService {
         // confiable.
         //
         // TODO: aspect_ratio y resolution quedan hardcodeados a los valores
-        // del piloto (vertical 9:16) hasta que se decida si van a variar por
-        // escena o por historia.
+        // del piloto (vertical 9:16 a 720p) hasta que se decida si van a
+        // variar por escena o por historia.
         //
-        // roundUpToAllowedDuration es obligatorio acá: modelos con
-        // DurationPolicy.DiscreteValues (STANDARD: solo 5 o 10) rechazan con
-        // 400 cualquier otro valor, así que la duración cruda de la escena
-        // (7, 8, ...) nunca puede llegar tal cual a Higgsfield.
+        // roundUpToAllowedDuration es obligatorio acá: cada modelo tiene su
+        // propio rango/enum de duración permitida (ver DurationPolicy en
+        // KnownHiggsfieldPricing) y rechaza con 400 cualquier otro valor, así
+        // que la duración cruda de la escena nunca puede llegar tal cual a
+        // Higgsfield.
         long requestedSeconds = secondsRoundedUp(scene.targetDuration());
         long allowedSeconds = higgsfieldConfig.pricingFor(modelId).roundUpToAllowedDuration(requestedSeconds);
 
@@ -298,19 +298,15 @@ public final class StoryApprovalService {
         parameters.put("prompt", scene.visualPrompt());
         parameters.put("duration", allowedSeconds);
         parameters.put("aspect_ratio", "9:16");
+        parameters.put("resolution", "720p");
 
-        // Kling 3.0 Standard (PREMIUM) genera audio propio salvo que se le
-        // pida explícitamente que no — sin este parámetro se paga por un
+        // Seedance 2.0 (STANDARD) y 2.5 (PREMIUM) generan audio propio por
+        // defecto (generate_audio=true) — sin desactivarlo se paga por un
         // audio que igual se descarta (VideoMontageBuilder pone la
-        // narración real encima, ver montage/). Kling 2.5 Turbo Pro
-        // (STANDARD) no tiene un parámetro equivalente — su schema solo
-        // acepta prompt/duration/cfg_scale/negative_prompt — así que no lo
-        // necesita. Si se agrega otro modelo con audio propio, sumarlo acá
-        // con el mismo tipo de chequeo por modelId para no repetir el
-        // desperdicio.
-        if (KnownHiggsfieldPricing.PREMIUM_MODEL_ID.equals(modelId)) {
-            parameters.put("sound", "off");
-        }
+        // narración real encima, ver montage/). A diferencia del viejo Kling
+        // STANDARD, acá los dos tiers lo necesitan, no solo PREMIUM.
+        parameters.put("generate_audio", false);
+
         return parameters;
     }
 

@@ -42,10 +42,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 3) El status real tiene 6 valores posibles (queued, in_progress, nsfw,
  *    failed, completed, canceled) -> nsfw/canceled tienen que terminar la
  *    escena en FAILED, nunca quedar poleados indefinidamente como "en curso".
- * 4) Kling 3.0 Standard (PREMIUM) genera audio propio salvo que se le pida
- *    "sound": "off" explícitamente -> se paga por un audio que después se
- *    descarta si no se manda. Kling 2.5 Turbo Pro (STANDARD) no tiene ese
- *    parámetro y no debe mandarlo.
+ * 4) Seedance 2.0 (STANDARD) y 2.5 (PREMIUM) generan audio propio por
+ *    defecto salvo que se les pida "generate_audio": false explícitamente
+ *    -> se paga por un audio que después se descarta (a diferencia del
+ *    viejo Kling, acá los dos tiers lo necesitan, no solo PREMIUM).
  *
  * Los tests de status usan un servidor HTTP local real (mismo patrón que
  * VideoMontageBuilderFfmpegTest) que devuelve las respuestas exactamente
@@ -60,7 +60,7 @@ class HiggsfieldRestClientTest {
     private static int port;
     private static HiggsfieldConfig config;
 
-    /** Bodies de submitGeneration capturados por el server fake, por modelId — ver fix 4 (sound off). */
+    /** Bodies de submitGeneration capturados por el server fake, por modelId — ver fix 4 (generate_audio false). */
     private static final Map<String, String> capturedGenerationRequestBodies = new ConcurrentHashMap<>();
 
     @BeforeAll
@@ -91,6 +91,9 @@ class HiggsfieldRestClientTest {
     }
 
     // --- fix 1: estimateCost calcula localmente, nunca pega a la red -----------------------
+    // STANDARD (Seedance 2.0) y PREMIUM (Seedance 2.5) usan los dos
+    // DurationPolicy.ContinuousRange -- [4, 15] y [4, 30] respectivamente --
+    // a diferencia del viejo Kling STANDARD, que era un enum fijo {5, 10}.
 
     @Test
     void estimateCost_computesLocallyWithoutHittingNetwork() {
@@ -98,12 +101,12 @@ class HiggsfieldRestClientTest {
 
         EstimateResponse exact = client.estimateCost(new EstimateRequest(
                 STANDARD_MODEL_ID, Map.of("duration", 5L, "prompt", "x", "aspect_ratio", "9:16")));
-        assertThat(exact.cost()).isEqualByComparingTo(new BigDecimal("0.105")); // 0.021 * 5
+        assertThat(exact.cost()).isEqualByComparingTo(new BigDecimal("1.75")); // 0.35 * 5
         assertThat(exact.currency()).isEqualTo("USD");
 
         EstimateResponse rounded = client.estimateCost(new EstimateRequest(
-                STANDARD_MODEL_ID, Map.of("duration", 7L, "prompt", "x", "aspect_ratio", "9:16")));
-        assertThat(rounded.cost()).isEqualByComparingTo(new BigDecimal("0.210")); // 7s -> redondea a 10 -> 0.021 * 10
+                STANDARD_MODEL_ID, Map.of("duration", 2L, "prompt", "x", "aspect_ratio", "9:16")));
+        assertThat(rounded.cost()).isEqualByComparingTo(new BigDecimal("1.40")); // 2s -> redondea al mínimo 4 -> 0.35 * 4
     }
 
     @Test
@@ -111,9 +114,9 @@ class HiggsfieldRestClientTest {
         HiggsfieldRestClient client = clientWithUnreachableBaseUrl();
 
         assertThatThrownBy(() -> client.estimateCost(new EstimateRequest(
-                STANDARD_MODEL_ID, Map.of("duration", 12L, "prompt", "x", "aspect_ratio", "9:16"))))
+                STANDARD_MODEL_ID, Map.of("duration", 20L, "prompt", "x", "aspect_ratio", "9:16"))))
                 .isInstanceOf(HiggsfieldException.class)
-                .hasMessageContaining("10");
+                .hasMessageContaining("15");
     }
 
     @Test
@@ -126,31 +129,29 @@ class HiggsfieldRestClientTest {
                 .hasMessageContaining("No hay tarifa configurada");
     }
 
-    // PREMIUM (Kling 3.0 Standard) usa un esquema de duración distinto al de
-    // STANDARD: rango continuo [3, 15], no un enum fijo de valores.
     @Test
-    void estimateCost_computesLocallyForContinuousRangeModel() {
+    void estimateCost_computesLocallyForPremiumModel() {
         HiggsfieldRestClient client = clientWithUnreachableBaseUrl();
 
         EstimateResponse belowMin = client.estimateCost(new EstimateRequest(
                 PREMIUM_MODEL_ID, Map.of("duration", 2L, "prompt", "x", "aspect_ratio", "9:16")));
-        assertThat(belowMin.cost()).isEqualByComparingTo(new BigDecimal("0.2142")); // 2s -> redondea al mínimo 3s -> 3 * 0.0714
+        assertThat(belowMin.cost()).isEqualByComparingTo(new BigDecimal("1.88")); // 2s -> redondea al mínimo 4 -> 4 * 0.47
         assertThat(belowMin.currency()).isEqualTo("USD");
 
         EstimateResponse withinRange = client.estimateCost(new EstimateRequest(
                 PREMIUM_MODEL_ID, Map.of("duration", 9L, "prompt", "x", "aspect_ratio", "9:16")));
-        assertThat(withinRange.cost()).isEqualByComparingTo(new BigDecimal("0.6426")); // 9s exacto, sin redondeo -> 9 * 0.0714
+        assertThat(withinRange.cost()).isEqualByComparingTo(new BigDecimal("4.23")); // 9s exacto, sin redondeo -> 9 * 0.47
 
         assertThatThrownBy(() -> client.estimateCost(new EstimateRequest(
-                PREMIUM_MODEL_ID, Map.of("duration", 20L, "prompt", "x", "aspect_ratio", "9:16"))))
+                PREMIUM_MODEL_ID, Map.of("duration", 35L, "prompt", "x", "aspect_ratio", "9:16"))))
                 .isInstanceOf(HiggsfieldException.class)
-                .hasMessageContaining("15"); // excede el máximo del rango
+                .hasMessageContaining("30"); // excede el máximo del rango
     }
 
-    // --- fix 4: "sound": "off" para PREMIUM (Kling 3.0), nunca para STANDARD --------------
+    // --- fix 4: "generate_audio": false para STANDARD y PREMIUM ---------------------------
 
     @Test
-    void generateApprovedScenes_sendsSoundOff_onlyForPremiumModel() {
+    void generateApprovedScenes_sendsGenerateAudioFalse_forBothTiers() {
         Scene standardScene = costApprovedScene("scene-standard", GenerationTier.STANDARD, STANDARD_MODEL_ID, 1);
         Scene premiumScene = costApprovedScene("scene-premium", GenerationTier.PREMIUM, PREMIUM_MODEL_ID, 1);
         Story standardStory = new Story("story-standard", "topic", "title", List.of(standardScene));
@@ -162,8 +163,8 @@ class HiggsfieldRestClientTest {
         String standardRequestBody = capturedGenerationRequestBodies.get(STANDARD_MODEL_ID);
         String premiumRequestBody = capturedGenerationRequestBodies.get(PREMIUM_MODEL_ID);
 
-        assertThat(standardRequestBody).isNotNull().doesNotContain("\"sound\"");
-        assertThat(premiumRequestBody).isNotNull().contains("\"sound\":\"off\"");
+        assertThat(standardRequestBody).isNotNull().contains("\"generate_audio\":false");
+        assertThat(premiumRequestBody).isNotNull().contains("\"generate_audio\":false");
     }
 
     /** Una Scene con costo APPROVED (generationStatus NOT_STARTED), lista para generateApprovedScenes. */
@@ -293,7 +294,7 @@ class HiggsfieldRestClientTest {
             String path = exchange.getRequestURI().getPath();
 
             // submitGeneration hace POST {baseUrl}/{modelId} -- capturamos el body para
-            // poder confirmar qué parámetros mandó de verdad (fix 4: sound off).
+            // poder confirmar qué parámetros mandó de verdad (fix 4: generate_audio false).
             if ("POST".equals(method) && ("/" + STANDARD_MODEL_ID).equals(path)) {
                 captureGenerationRequestAndRespond(exchange, STANDARD_MODEL_ID);
                 return;
