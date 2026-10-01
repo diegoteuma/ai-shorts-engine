@@ -25,7 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,10 +42,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 3) El status real tiene 6 valores posibles (queued, in_progress, nsfw,
  *    failed, completed, canceled) -> nsfw/canceled tienen que terminar la
  *    escena en FAILED, nunca quedar poleados indefinidamente como "en curso".
- * 4) Seedance 2.0 (STANDARD) y 2.5 (PREMIUM) generan audio propio por
- *    defecto salvo que se les pida "generate_audio": false explícitamente
- *    -> se paga por un audio que después se descarta (a diferencia del
- *    viejo Kling, acá los dos tiers lo necesitan, no solo PREMIUM).
+ * 4) Seedance 2.0 genera audio propio por defecto salvo que se le pida
+ *    "generate_audio": false explícitamente -> se paga por un audio que
+ *    después se descarta. STANDARD y PREMIUM comparten el mismo modelo (ver
+ *    KnownHiggsfieldPricing), así que esto aplica a los dos tiers por igual.
  *
  * Los tests de status usan un servidor HTTP local real (mismo patrón que
  * VideoMontageBuilderFfmpegTest) que devuelve las respuestas exactamente
@@ -60,8 +60,13 @@ class HiggsfieldRestClientTest {
     private static int port;
     private static HiggsfieldConfig config;
 
-    /** Bodies de submitGeneration capturados por el server fake, por modelId — ver fix 4 (generate_audio false). */
-    private static final Map<String, String> capturedGenerationRequestBodies = new ConcurrentHashMap<>();
+    /**
+     * Bodies de submitGeneration capturados por el server fake — ver fix 4
+     * (generate_audio false). Lista, no Map por modelId: STANDARD y PREMIUM
+     * comparten el mismo model_id (ver KnownHiggsfieldPricing), así que una
+     * clave por modelId perdería el segundo body al pisar al primero.
+     */
+    private static final List<String> capturedGenerationRequestBodies = new CopyOnWriteArrayList<>();
 
     @BeforeAll
     static void startServer() throws IOException {
@@ -91,9 +96,10 @@ class HiggsfieldRestClientTest {
     }
 
     // --- fix 1: estimateCost calcula localmente, nunca pega a la red -----------------------
-    // STANDARD (Seedance 2.0) y PREMIUM (Seedance 2.5) usan los dos
-    // DurationPolicy.ContinuousRange -- [4, 15] y [4, 30] respectivamente --
-    // a diferencia del viejo Kling STANDARD, que era un enum fijo {5, 10}.
+    // STANDARD y PREMIUM comparten el mismo modelo (Seedance 2.0) y por lo
+    // tanto el mismo DurationPolicy.ContinuousRange [4, 15] -- a diferencia
+    // del viejo esquema Kling, donde STANDARD era un enum fijo {5, 10} y
+    // PREMIUM un rango [3, 15] propio.
 
     @Test
     void estimateCost_computesLocallyWithoutHittingNetwork() {
@@ -129,29 +135,33 @@ class HiggsfieldRestClientTest {
                 .hasMessageContaining("No hay tarifa configurada");
     }
 
+    /**
+     * STANDARD y PREMIUM están unificados a propósito en el mismo model_id
+     * de Higgsfield (ver KnownHiggsfieldPricing) -- confirma que eso no
+     * revienta la construcción de HiggsfieldConfig (dos tiers, un solo
+     * modelId: pricingByModelId no puede tener dos entradas con la misma
+     * key) y que PREMIUM_MODEL_ID resuelve exactamente la misma tarifa que
+     * STANDARD_MODEL_ID, no una copia que pueda divergir.
+     */
     @Test
-    void estimateCost_computesLocallyForPremiumModel() {
+    void standardAndPremium_resolveToTheSameSharedPricing() {
+        assertThat(PREMIUM_MODEL_ID).isEqualTo(STANDARD_MODEL_ID);
+        assertThat(config.pricingByModelId()).hasSize(1);
+
         HiggsfieldRestClient client = clientWithUnreachableBaseUrl();
+        EstimateResponse viaStandard = client.estimateCost(new EstimateRequest(
+                STANDARD_MODEL_ID, Map.of("duration", 5L, "prompt", "x", "aspect_ratio", "9:16")));
+        EstimateResponse viaPremium = client.estimateCost(new EstimateRequest(
+                PREMIUM_MODEL_ID, Map.of("duration", 5L, "prompt", "x", "aspect_ratio", "9:16")));
 
-        EstimateResponse belowMin = client.estimateCost(new EstimateRequest(
-                PREMIUM_MODEL_ID, Map.of("duration", 2L, "prompt", "x", "aspect_ratio", "9:16")));
-        assertThat(belowMin.cost()).isEqualByComparingTo(new BigDecimal("1.88")); // 2s -> redondea al mínimo 4 -> 4 * 0.47
-        assertThat(belowMin.currency()).isEqualTo("USD");
-
-        EstimateResponse withinRange = client.estimateCost(new EstimateRequest(
-                PREMIUM_MODEL_ID, Map.of("duration", 9L, "prompt", "x", "aspect_ratio", "9:16")));
-        assertThat(withinRange.cost()).isEqualByComparingTo(new BigDecimal("4.23")); // 9s exacto, sin redondeo -> 9 * 0.47
-
-        assertThatThrownBy(() -> client.estimateCost(new EstimateRequest(
-                PREMIUM_MODEL_ID, Map.of("duration", 35L, "prompt", "x", "aspect_ratio", "9:16"))))
-                .isInstanceOf(HiggsfieldException.class)
-                .hasMessageContaining("30"); // excede el máximo del rango
+        assertThat(viaPremium.cost()).isEqualByComparingTo(viaStandard.cost());
     }
 
     // --- fix 4: "generate_audio": false para STANDARD y PREMIUM ---------------------------
 
     @Test
     void generateApprovedScenes_sendsGenerateAudioFalse_forBothTiers() {
+        capturedGenerationRequestBodies.clear();
         Scene standardScene = costApprovedScene("scene-standard", GenerationTier.STANDARD, STANDARD_MODEL_ID, 1);
         Scene premiumScene = costApprovedScene("scene-premium", GenerationTier.PREMIUM, PREMIUM_MODEL_ID, 1);
         Story standardStory = new Story("story-standard", "topic", "title", List.of(standardScene));
@@ -160,11 +170,12 @@ class HiggsfieldRestClientTest {
         approvalService().generateApprovedScenes(standardStory);
         approvalService().generateApprovedScenes(premiumStory);
 
-        String standardRequestBody = capturedGenerationRequestBodies.get(STANDARD_MODEL_ID);
-        String premiumRequestBody = capturedGenerationRequestBodies.get(PREMIUM_MODEL_ID);
-
-        assertThat(standardRequestBody).isNotNull().contains("\"generate_audio\":false");
-        assertThat(premiumRequestBody).isNotNull().contains("\"generate_audio\":false");
+        // Dos requests (uno por tier) contra el mismo model_id compartido --
+        // cada uno tiene que llevar generate_audio:false independientemente
+        // de que la escena haya elegido STANDARD o PREMIUM.
+        assertThat(capturedGenerationRequestBodies).hasSize(2);
+        assertThat(capturedGenerationRequestBodies).allSatisfy(
+                body -> assertThat(body).contains("\"generate_audio\":false"));
     }
 
     /** Una Scene con costo APPROVED (generationStatus NOT_STARTED), lista para generateApprovedScenes. */
@@ -295,12 +306,11 @@ class HiggsfieldRestClientTest {
 
             // submitGeneration hace POST {baseUrl}/{modelId} -- capturamos el body para
             // poder confirmar qué parámetros mandó de verdad (fix 4: generate_audio false).
+            // Un solo check: STANDARD_MODEL_ID y PREMIUM_MODEL_ID son el mismo
+            // literal a propósito (ver KnownHiggsfieldPricing), así que un
+            // segundo "if" idéntico sería código muerto.
             if ("POST".equals(method) && ("/" + STANDARD_MODEL_ID).equals(path)) {
                 captureGenerationRequestAndRespond(exchange, STANDARD_MODEL_ID);
-                return;
-            }
-            if ("POST".equals(method) && ("/" + PREMIUM_MODEL_ID).equals(path)) {
-                captureGenerationRequestAndRespond(exchange, PREMIUM_MODEL_ID);
                 return;
             }
 
@@ -332,7 +342,7 @@ class HiggsfieldRestClientTest {
 
     private static void captureGenerationRequestAndRespond(HttpExchange exchange, String modelId) throws IOException {
         String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-        capturedGenerationRequestBodies.put(modelId, requestBody);
+        capturedGenerationRequestBodies.add(requestBody);
         respond(exchange, """
                 {"status":"queued","request_id":"req-%s","status_url":"%s"}\
                 """.formatted(modelId.replace('/', '-'), baseUrl() + "/requests/req-generated/status"));

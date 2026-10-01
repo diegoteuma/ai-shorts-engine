@@ -300,11 +300,12 @@ public final class StoryApprovalService {
         parameters.put("aspect_ratio", "9:16");
         parameters.put("resolution", "720p");
 
-        // Seedance 2.0 (STANDARD) y 2.5 (PREMIUM) generan audio propio por
-        // defecto (generate_audio=true) — sin desactivarlo se paga por un
-        // audio que igual se descarta (VideoMontageBuilder pone la
-        // narración real encima, ver montage/). A diferencia del viejo Kling
-        // STANDARD, acá los dos tiers lo necesitan, no solo PREMIUM.
+        // Seedance 2.0 genera audio propio por defecto (generate_audio=true)
+        // — sin desactivarlo se paga por un audio que igual se descarta
+        // (VideoMontageBuilder pone la narración real encima, ver montage/).
+        // STANDARD y PREMIUM comparten el mismo modelo de Higgsfield (ver
+        // KnownHiggsfieldPricing), así que esto siempre aplica, sin
+        // distinción por tier.
         parameters.put("generate_audio", false);
 
         return parameters;

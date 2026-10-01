@@ -93,8 +93,9 @@ com.aishorts.engine
 │                   terminan la escena en FAILED, nunca quedan poleados
 │                   indefinidamente. duration va como parámetro estructurado
 │                   de la llamada (igual que aspect_ratio), nunca como texto
-│                   del prompt; Kling 3.0 Standard (PREMIUM) además necesita
-│                   "sound": "off" o factura audio que después se descarta.
+│                   del prompt; Seedance 2.0 además necesita
+│                   "generate_audio": false o factura audio que después se
+│                   descarta (STANDARD y PREMIUM comparten el mismo modelo).
 │
 ├── approval/       StoryApprovalService: el orquestador de las dos puertas
 │                   humanas, siempre por lote (la historia completa, no
@@ -331,15 +332,18 @@ Opcionales (con default): `API_PORT` (8080, mapeado a `server.port` en
 pendiente de "manejo de credenciales" — variables de entorno alcanzan para
 un piloto de una persona; un secret manager sería sobre-ingeniería hoy.
 
-Los dos modelos del piloto ya están confirmados contra el spec real de
-Higgsfield y sus tarifas cargadas en `KnownHiggsfieldPricing` — exportar
-`HIGGSFIELD_MODEL_STANDARD` y `HIGGSFIELD_MODEL_PREMIUM` con estos valores
-exactos (tienen que coincidir con las claves de `KnownHiggsfieldPricing`
-para que `estimateCost` les encuentre tarifa):
+El modelo del piloto ya está confirmado contra la consola de Higgsfield y su
+tarifa cargada en `KnownHiggsfieldPricing` — exportar
+`HIGGSFIELD_MODEL_STANDARD` y `HIGGSFIELD_MODEL_PREMIUM` con este valor
+exacto (tienen que coincidir con la clave de `KnownHiggsfieldPricing`
+para que `estimateCost` le encuentre tarifa). STANDARD y PREMIUM apuntan
+hoy al mismo modelo — Seedance 2.5 no aporta nada sobre 2.0 a 720p y es más
+caro, así que se unificaron ambos tiers — el concepto de tier en el dominio
+(puerta 1, `Scene.chosenTier`) sigue existiendo igual:
 
 ```
-HIGGSFIELD_MODEL_STANDARD=kling-video/v2.5-turbo/pro/text-to-video   # Kling 2.5 Turbo Pro, $0.021/s, duration ∈ {5,10}
-HIGGSFIELD_MODEL_PREMIUM=kling-video/v3.0/std/text-to-video          # Kling 3.0 Standard, $0.0714/s, duration ∈ [3,15]
+HIGGSFIELD_MODEL_STANDARD=bytedance/seedance-2.0/text-to-video   # Seedance 2.0, $0.35/s (720p, placeholder sin confirmar), duration ∈ [4,15]
+HIGGSFIELD_MODEL_PREMIUM=bytedance/seedance-2.0/text-to-video    # mismo modelo que STANDARD (ver KnownHiggsfieldPricing)
 ```
 
 ```bash
