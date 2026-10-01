@@ -148,4 +148,117 @@ class SceneTest {
         // ESTIMATED, no uno ya REJECTED (haría falta un nuevo recordCostEstimate).
         assertThatIllegalStateException().isThrownBy(scene::approveCost);
     }
+
+    // --- resetForRegeneration ------------------------------------------------------------
+
+    private static Scene completedScene() {
+        Scene scene = newScene();
+        scene.proposeTier(new TierRecommendation(GenerationTier.PREMIUM, 70, "alto impacto visual"));
+        scene.approvePrompt();
+        scene.attachNarrationAudio("audio/scene-1.mp3", Duration.ofSeconds(7));
+        scene.recordCostEstimate(estimate("1.20"), "higgsfield-ai/soul-premium/cinema");
+        scene.approveCost();
+        scene.startGeneration("req-1", "https://status/req-1");
+        scene.completeGeneration("https://cdn.example/req-1.mp4");
+        return scene;
+    }
+
+    @Test
+    void resetForRegeneration_onCompletedScene_clearsCostAndGenerationButKeepsNarrationPromptAndTier() {
+        Scene scene = completedScene();
+
+        scene.resetForRegeneration();
+
+        // La narración real y las decisiones de la puerta 1 no se tocan.
+        assertThat(scene.narrationAudioPath()).isEqualTo("audio/scene-1.mp3");
+        assertThat(scene.targetDuration()).isEqualTo(Duration.ofSeconds(7));
+        assertThat(scene.promptStatus()).isEqualTo(SceneApprovalStatus.APPROVED);
+        assertThat(scene.visualPrompt()).isEqualTo("prompt visual");
+        assertThat(scene.chosenTier()).isEqualTo(GenerationTier.PREMIUM);
+
+        // Lo técnico de costo/generación se descarta por completo.
+        assertThat(scene.costStatus()).isEqualTo(SceneCostStatus.NOT_ESTIMATED);
+        assertThat(scene.costEstimate()).isNull();
+        assertThat(scene.costRejectionNote()).isNull();
+        assertThat(scene.chosenModelId()).isNull();
+        assertThat(scene.generationStatus()).isEqualTo(GenerationStatus.NOT_STARTED);
+        assertThat(scene.higgsfieldRequestId()).isNull();
+        assertThat(scene.higgsfieldStatusUrl()).isNull();
+        assertThat(scene.generatedAssetUrl()).isNull();
+        assertThat(scene.generationFailureReason()).isNull();
+    }
+
+    @Test
+    void resetForRegeneration_onFailedScene_clearsFailureReason() {
+        Scene scene = completedScene();
+        scene.failGeneration("Higgsfield marcó el contenido como NSFW.");
+        assertThat(scene.generationStatus()).isEqualTo(GenerationStatus.FAILED);
+
+        scene.resetForRegeneration();
+
+        assertThat(scene.generationStatus()).isEqualTo(GenerationStatus.NOT_STARTED);
+        assertThat(scene.generationFailureReason()).isNull();
+    }
+
+    @Test
+    void resetForRegeneration_requiresApprovedPrompt() {
+        Scene scene = newScene();
+
+        assertThatIllegalStateException().isThrownBy(scene::resetForRegeneration);
+    }
+
+    @Test
+    void resetForRegeneration_rejectsSceneWithGenerationQueued() {
+        Scene scene = completedScene();
+        // Vuelve a encolar sobre el request anterior, simulando una nueva
+        // generación que todavía no terminó.
+        scene.failGeneration("reset de prueba");
+        scene.resetForRegeneration();
+        scene.recordCostEstimate(estimate("1.20"), "higgsfield-ai/soul-premium/cinema");
+        scene.approveCost();
+        scene.startGeneration("req-2", "https://status/req-2");
+        assertThat(scene.generationStatus()).isEqualTo(GenerationStatus.QUEUED);
+
+        assertThatIllegalStateException().isThrownBy(scene::resetForRegeneration);
+
+        // El estado no cambió: sigue QUEUED con el mismo request.
+        assertThat(scene.generationStatus()).isEqualTo(GenerationStatus.QUEUED);
+        assertThat(scene.higgsfieldRequestId()).isEqualTo("req-2");
+    }
+
+    @Test
+    void resetForRegeneration_rejectsSceneWithGenerationInProgress() {
+        Scene scene = completedScene();
+        scene.failGeneration("reset de prueba");
+        scene.resetForRegeneration();
+        scene.recordCostEstimate(estimate("1.20"), "higgsfield-ai/soul-premium/cinema");
+        scene.approveCost();
+        scene.startGeneration("req-3", "https://status/req-3");
+        scene.markInProgress();
+        assertThat(scene.generationStatus()).isEqualTo(GenerationStatus.IN_PROGRESS);
+
+        assertThatIllegalStateException().isThrownBy(scene::resetForRegeneration);
+
+        // El estado no cambió: sigue IN_PROGRESS con el mismo request.
+        assertThat(scene.generationStatus()).isEqualTo(GenerationStatus.IN_PROGRESS);
+        assertThat(scene.higgsfieldRequestId()).isEqualTo("req-3");
+    }
+
+    @Test
+    void resetForRegeneration_allowsTheFullPipelineToRunAgainAfterward() {
+        Scene scene = completedScene();
+
+        scene.resetForRegeneration();
+
+        // Los guards existentes dejan avanzar de nuevo el camino completo.
+        scene.recordCostEstimate(estimate("0.99"), "bytedance/seedance-2.0/text-to-video");
+        assertThat(scene.costStatus()).isEqualTo(SceneCostStatus.ESTIMATED);
+        scene.approveCost();
+        assertThat(scene.isCostApproved()).isTrue();
+        scene.startGeneration("req-new", "https://status/req-new");
+        assertThat(scene.generationStatus()).isEqualTo(GenerationStatus.QUEUED);
+        scene.completeGeneration("https://cdn.example/req-new.mp4");
+        assertThat(scene.generationStatus()).isEqualTo(GenerationStatus.COMPLETED);
+        assertThat(scene.generatedAssetUrl()).isEqualTo("https://cdn.example/req-new.mp4");
+    }
 }

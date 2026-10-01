@@ -200,6 +200,38 @@ public final class Scene {
         return isCostApproved() && generationStatus == GenerationStatus.NOT_STARTED;
     }
 
+    /**
+     * Resetea una escena ya estimada/generada para volver a pasar por
+     * estimate→aprobar costo→generar, típicamente porque cambió el modelo o
+     * la tarifa configurada (ver KnownHiggsfieldPricing) y el resultado
+     * anterior ya no sirve (video con orientación incorrecta, tarifa vieja, etc).
+     * A propósito NO toca narrationAudioPath, targetDuration, promptStatus,
+     * visualPrompt ni chosenTier: la narración real y las decisiones de la
+     * puerta 1 siguen siendo válidas, solo se descarta lo técnico de
+     * costo/generación. Requiere prompt aprobado. Se rechaza si hay una
+     * generación en curso en Higgsfield (QUEUED o IN_PROGRESS — ambas son
+     * "enviada a Higgsfield y todavía no terminal"), porque borrar el
+     * requestId dejaría un job corriendo y cobrando sin que nadie lo vuelva
+     * a consultar.
+     */
+    public void resetForRegeneration() {
+        requirePromptApproved("resetear la generación");
+        if (generationStatus == GenerationStatus.QUEUED || generationStatus == GenerationStatus.IN_PROGRESS) {
+            throw new IllegalStateException(
+                    "No se puede resetear la escena " + id + " con generación en curso (estado=" + generationStatus
+                            + ", requestId=" + higgsfieldRequestId + "): espera a que termine con poll-generation.");
+        }
+        this.costStatus = SceneCostStatus.NOT_ESTIMATED;
+        this.costEstimate = null;
+        this.costRejectionNote = null;
+        this.chosenModelId = null;
+        this.generationStatus = GenerationStatus.NOT_STARTED;
+        this.higgsfieldRequestId = null;
+        this.higgsfieldStatusUrl = null;
+        this.generatedAssetUrl = null;
+        this.generationFailureReason = null;
+    }
+
     // --- guards ------------------------------------------------------------------------
 
     private void requirePromptApproved(String action) {

@@ -15,6 +15,8 @@ import com.aishorts.engine.higgsfield.HiggsfieldClient;
 import com.aishorts.engine.higgsfield.HiggsfieldConfig;
 import com.aishorts.engine.tts.TtsResult;
 import com.aishorts.engine.tts.TtsService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -36,6 +38,8 @@ import java.util.Map;
  * dos aprobaciones explícitas.
  */
 public final class StoryApprovalService {
+
+    private static final Logger log = LoggerFactory.getLogger(StoryApprovalService.class);
 
     private final HiggsfieldClient higgsfieldClient;
     private final HiggsfieldConfig higgsfieldConfig;
@@ -273,6 +277,46 @@ public final class StoryApprovalService {
             default -> throw new IllegalStateException(
                     "Higgsfield devolvió un status desconocido para la escena '" + scene.id() + "': '" + value + "'.");
         }
+    }
+
+    /**
+     * Resetea todas las escenas de la historia para volver a pasar por
+     * estimate→puerta 2→generate (ver {@link Scene#resetForRegeneration()}).
+     * No dispara nada automáticamente.
+     */
+    public BatchResult resetAllScenesForRegeneration(Story story) {
+        return resetScenesForRegeneration(story, story.scenes().stream().map(Scene::id).toList());
+    }
+
+    /**
+     * Resetea las escenas indicadas para volver a pasar por
+     * estimate→puerta 2→generate. No dispara nada automáticamente. Lista
+     * vacía o null es un error (para resetear todo se usa
+     * {@link #resetAllScenesForRegeneration}, así una lista vacía mandada
+     * por error no borra todo en silencio).
+     */
+    public BatchResult resetScenesForRegeneration(Story story, List<String> sceneIds) {
+        if (sceneIds == null || sceneIds.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "sceneIds no puede estar vacío; para resetear todas las escenas omite el body");
+        }
+        List<String> succeeded = new java.util.ArrayList<>();
+        Map<String, String> failed = new LinkedHashMap<>();
+
+        for (String sceneId : sceneIds.stream().distinct().toList()) {
+            try {
+                Scene scene = findScene(story, sceneId);
+                log.info(
+                        "Reseteando escena '{}' para regeneración (último intento: chosenModelId={}, "
+                                + "costEstimate={}, generatedAssetUrl={})",
+                        sceneId, scene.chosenModelId(), scene.costEstimate(), scene.generatedAssetUrl());
+                scene.resetForRegeneration();
+                succeeded.add(sceneId);
+            } catch (RuntimeException e) {
+                failed.put(sceneId, e.getMessage());
+            }
+        }
+        return new BatchResult(succeeded, failed);
     }
 
     private Map<String, Object> buildGenerationParameters(Scene scene, String modelId) {

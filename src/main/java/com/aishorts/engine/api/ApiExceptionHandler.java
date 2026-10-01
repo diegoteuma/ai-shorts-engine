@@ -23,6 +23,11 @@ class ApiExceptionHandler {
         return ResponseEntity.badRequest().body(Map.of("error", "Body no es JSON válido: " + e.getMostSpecificCause().getMessage()));
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException e) {
+        return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException e) {
         String message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();

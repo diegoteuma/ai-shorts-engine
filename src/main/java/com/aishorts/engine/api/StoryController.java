@@ -53,6 +53,8 @@ import java.util.UUID;
  * POST   /stories/{id}/cost-decisions     applyCostDecisions     (PUERTA 2)
  * POST   /stories/{id}/generate           generateApprovedScenes
  * POST   /stories/{id}/poll-generation    pollGenerationStatus  (llamar seguido hasta que termine)
+ * POST   /stories/{id}/reset-generation   resetAllScenesForRegeneration / resetScenesForRegeneration
+ *                                          (body omitido -> todas; lista de sceneIds -> parcial; [] -> 400)
  * </pre>
  */
 @RestController
@@ -158,6 +160,17 @@ public class StoryController {
     public Map<String, Object> pollGeneration(@PathVariable("id") String id) {
         Story story = loadOrNotFound(id);
         BatchResult result = approvalService.pollGenerationStatus(story);
+        repository.save(story);
+        return batchResponse(result, story);
+    }
+
+    @PostMapping("/{id}/reset-generation")
+    public Map<String, Object> resetGeneration(
+            @PathVariable("id") String id, @RequestBody(required = false) List<String> sceneIds) {
+        Story story = loadOrNotFound(id);
+        BatchResult result = (sceneIds == null)
+                ? approvalService.resetAllScenesForRegeneration(story)
+                : approvalService.resetScenesForRegeneration(story, sceneIds);
         repository.save(story);
         return batchResponse(result, story);
     }
