@@ -28,6 +28,9 @@ public final class KnownHiggsfieldPricing {
 
     public static final String PREMIUM_MODEL_ID = "bytedance/seedance-2.0/text-to-video";
 
+    /** Wan 3.0 Prime (Alibaba) — ver el entry de abajo en defaults() para el pricing/duración real. */
+    public static final String WAN_PRIME_MODEL_ID = "alibaba/wan-3.0-prime/text-to-video";
+
     private KnownHiggsfieldPricing() {
     }
 
@@ -51,6 +54,25 @@ public final class KnownHiggsfieldPricing {
         pricing.put(STANDARD_MODEL_ID, new ModelPricing(
                 new BigDecimal("0.35"),
                 new DurationPolicy.ContinuousRange(4, 15),
+                "USD"));
+
+        // Wan 3.0 Prime (Alibaba) Text to Video — duration continua 2-30s.
+        // Igual que Seedance arriba, no hay una sola key compartida con
+        // Seedance porque son modelId distintos; si algún día STANDARD y
+        // PREMIUM volvieran a apuntar al mismo id entre sí, pricing.put()
+        // sobre este LinkedHashMap simplemente pisa la entrada anterior sin
+        // tirar excepción (no se arma con Map.of/Collectors.toMap, que sí
+        // explotarían con keys duplicadas).
+        //
+        // TODO: pricePerSecond SIN CONFIRMAR contra el cargo real de
+        // Higgsfield — Higgsfield no publica precio por resolución para este
+        // modelo. $0.14/s a 720p es una referencia tomada de fal/agregadores
+        // externos, no de la consola de Higgsfield. Verificar corriendo una
+        // generación real mínima (duration=2) a 720p y leyendo el cargo real
+        // en el usage de Higgsfield, después reemplazar este placeholder.
+        pricing.put(WAN_PRIME_MODEL_ID, new ModelPricing(
+                new BigDecimal("0.14"),
+                new DurationPolicy.ContinuousRange(2, 30),
                 "USD"));
 
         return pricing;

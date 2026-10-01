@@ -55,6 +55,7 @@ class HiggsfieldRestClientTest {
 
     private static final String STANDARD_MODEL_ID = KnownHiggsfieldPricing.STANDARD_MODEL_ID;
     private static final String PREMIUM_MODEL_ID = KnownHiggsfieldPricing.PREMIUM_MODEL_ID;
+    private static final String WAN_MODEL_ID = KnownHiggsfieldPricing.WAN_PRIME_MODEL_ID;
 
     private static HttpServer server;
     private static int port;
@@ -141,12 +142,14 @@ class HiggsfieldRestClientTest {
      * revienta la construcción de HiggsfieldConfig (dos tiers, un solo
      * modelId: pricingByModelId no puede tener dos entradas con la misma
      * key) y que PREMIUM_MODEL_ID resuelve exactamente la misma tarifa que
-     * STANDARD_MODEL_ID, no una copia que pueda divergir.
+     * STANDARD_MODEL_ID, no una copia que pueda divergir. pricingByModelId
+     * tiene 2 entradas en total: la compartida de Seedance 2.0 (STANDARD +
+     * PREMIUM) más la de Wan 3.0 Prime (ver WAN_PRIME_MODEL_ID más abajo).
      */
     @Test
     void standardAndPremium_resolveToTheSameSharedPricing() {
         assertThat(PREMIUM_MODEL_ID).isEqualTo(STANDARD_MODEL_ID);
-        assertThat(config.pricingByModelId()).hasSize(1);
+        assertThat(config.pricingByModelId()).hasSize(2);
 
         HiggsfieldRestClient client = clientWithUnreachableBaseUrl();
         EstimateResponse viaStandard = client.estimateCost(new EstimateRequest(
@@ -155,6 +158,50 @@ class HiggsfieldRestClientTest {
                 PREMIUM_MODEL_ID, Map.of("duration", 5L, "prompt", "x", "aspect_ratio", "9:16")));
 
         assertThat(viaPremium.cost()).isEqualByComparingTo(viaStandard.cost());
+    }
+
+    // --- Wan 3.0 Prime: tarifa nueva agregada sin sacar la de Seedance ---------------------
+
+    @Test
+    void estimateCost_computesLocallyForWanPrime() {
+        HiggsfieldRestClient client = clientWithUnreachableBaseUrl();
+
+        EstimateResponse exact = client.estimateCost(new EstimateRequest(
+                WAN_MODEL_ID, Map.of("duration", 5L, "prompt", "x", "aspect_ratio", "9:16")));
+        assertThat(exact.cost()).isEqualByComparingTo(new BigDecimal("0.70")); // 0.14 * 5
+
+        EstimateResponse atMinimum = client.estimateCost(new EstimateRequest(
+                WAN_MODEL_ID, Map.of("duration", 2L, "prompt", "x", "aspect_ratio", "9:16")));
+        assertThat(atMinimum.cost()).isEqualByComparingTo(new BigDecimal("0.28")); // 2s exacto (mínimo), sin redondeo -> 0.14 * 2
+
+        assertThatThrownBy(() -> client.estimateCost(new EstimateRequest(
+                WAN_MODEL_ID, Map.of("duration", 31L, "prompt", "x", "aspect_ratio", "9:16"))))
+                .isInstanceOf(HiggsfieldException.class)
+                .hasMessageContaining("30"); // excede el máximo del rango [2, 30]
+    }
+
+    /**
+     * Wan defaultea a resolution "1080p" (el doble de precio que "720p") y
+     * aspect_ratio "adaptive" si no se mandan explícitos -- confirma que
+     * buildGenerationParameters los pisa siempre, para este modelo
+     * puntualmente, no solo para Seedance. duration también tiene que viajar
+     * como entero JSON (sin decimales): el campo duration de Wan es integer.
+     */
+    @Test
+    void generateApprovedScenes_forWanPrime_sendsExplicitResolutionAndAspectRatio() {
+        capturedGenerationRequestBodies.clear();
+        Scene scene = costApprovedScene("scene-wan", GenerationTier.STANDARD, WAN_MODEL_ID, 1);
+        Story story = new Story("story-wan", "topic", "title", List.of(scene));
+
+        approvalService().generateApprovedScenes(story);
+
+        assertThat(capturedGenerationRequestBodies).hasSize(1);
+        String body = capturedGenerationRequestBodies.get(0);
+        assertThat(body).contains("\"resolution\":\"720p\"");
+        assertThat(body).contains("\"aspect_ratio\":\"9:16\"");
+        assertThat(body).contains("\"generate_audio\":false");
+        assertThat(body).contains("\"duration\":5");
+        assertThat(body).doesNotContain("\"duration\":5.0").doesNotContain("\"duration\":\"5\"");
     }
 
     // --- fix 4: "generate_audio": false para STANDARD y PREMIUM ---------------------------
@@ -311,6 +358,13 @@ class HiggsfieldRestClientTest {
             // segundo "if" idéntico sería código muerto.
             if ("POST".equals(method) && ("/" + STANDARD_MODEL_ID).equals(path)) {
                 captureGenerationRequestAndRespond(exchange, STANDARD_MODEL_ID);
+                return;
+            }
+            // WAN_MODEL_ID es un literal distinto de STANDARD_MODEL_ID (a
+            // diferencia de PREMIUM_MODEL_ID arriba), así que acá sí hace
+            // falta un segundo check real.
+            if ("POST".equals(method) && ("/" + WAN_MODEL_ID).equals(path)) {
+                captureGenerationRequestAndRespond(exchange, WAN_MODEL_ID);
                 return;
             }
 

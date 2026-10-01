@@ -330,6 +330,12 @@ public final class StoryApprovalService {
         // del piloto (vertical 9:16 a 720p) hasta que se decida si van a
         // variar por escena o por historia.
         //
+        // IMPORTANTE: mandar aspect_ratio y resolution SIEMPRE explícitos,
+        // nunca confiar en el default de Higgsfield — varía por modelo y
+        // puede salir caro en silencio. Wan 3.0 Prime, por ejemplo, defaultea
+        // a resolution "1080p" (el doble de precio que "720p") y aspect_ratio
+        // "adaptive" (no necesariamente 9:16 vertical).
+        //
         // roundUpToAllowedDuration es obligatorio acá: cada modelo tiene su
         // propio rango/enum de duración permitida (ver DurationPolicy en
         // KnownHiggsfieldPricing) y rechaza con 400 cualquier otro valor, así
