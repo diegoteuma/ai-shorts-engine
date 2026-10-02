@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Arma el video final de un Short a partir de las escenas ya generadas:
@@ -56,6 +57,28 @@ public final class VideoMontageBuilder {
      */
     public Path build(Story story, Path workDir, Path srtEsPath, Path outputPath) {
         requireReadyForMontage(story);
+        return build(story, Scene::generatedAssetUrl, workDir, srtEsPath, outputPath);
+    }
+
+    /**
+     * Igual que {@link #build(Story, Path, Path, Path)}, pero toma el clip de
+     * cada escena de {@code clipsDir/<sceneId>.mp4} en vez de bajarlo de
+     * generatedAssetUrl — no toca la red, así que sirve aunque las URLs de
+     * Higgsfield hayan expirado. No exige generationStatus COMPLETED: lo que
+     * importa es que el archivo esté. Quien llama valida antes que existan
+     * clips y audios (ver StoryMontageService), para fallar con un mensaje
+     * claro antes de correr ffmpeg.
+     */
+    public Path buildFromLocalClips(Story story, Path clipsDir, Path workDir, Path srtEsPath, Path outputPath) {
+        return build(story, scene -> localClipPath(clipsDir, scene).toUri().toString(), workDir, srtEsPath, outputPath);
+    }
+
+    /** Dónde {@link #buildFromLocalClips} espera el clip de una escena. */
+    public static Path localClipPath(Path clipsDir, Scene scene) {
+        return clipsDir.resolve(scene.id() + ".mp4");
+    }
+
+    private Path build(Story story, Function<Scene, String> clipSource, Path workDir, Path srtEsPath, Path outputPath) {
         try {
             Files.createDirectories(workDir);
         } catch (IOException e) {
@@ -67,7 +90,7 @@ public final class VideoMontageBuilder {
 
         List<Path> perSceneClips = new ArrayList<>();
         for (Scene scene : story.scenes()) {
-            perSceneClips.add(muxSceneWithAudio(scene, workDir));
+            perSceneClips.add(muxSceneWithAudio(scene, clipSource.apply(scene), workDir));
         }
 
         Path concatenated = workDir.resolve("concatenated.mp4");
@@ -80,9 +103,9 @@ public final class VideoMontageBuilder {
 
     // --- paso 1: por escena, bajar el clip y ponerle el audio de narración -----------------
 
-    private Path muxSceneWithAudio(Scene scene, Path workDir) {
+    private Path muxSceneWithAudio(Scene scene, String clipSource, Path workDir) {
         Path rawClip = workDir.resolve(scene.id() + "-raw.mp4");
-        assetDownloader.download(scene.generatedAssetUrl(), rawClip);
+        assetDownloader.download(clipSource, rawClip);
 
         Path withAudio = workDir.resolve(scene.id() + "-with-audio.mp4");
         ffmpegRunner.run(List.of(

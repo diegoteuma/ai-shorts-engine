@@ -294,7 +294,25 @@ POST   /stories/{id}/cost-estimates     estimateCostsForApprovedScenes
 POST   /stories/{id}/cost-decisions     applyCostDecisions     (PUERTA 2)
 POST   /stories/{id}/generate           generateApprovedScenes
 POST   /stories/{id}/poll-generation    pollGenerationStatus
+POST   /stories/{id}/reset-generation   resetAllScenesForRegeneration / resetScenesForRegeneration
+POST   /stories/{id}/montage            StoryMontageService.montage (video final desde archivos locales)
 ```
+
+### Montaje (`POST /stories/{id}/montage`)
+
+Arma el video final con archivos que ya están en disco — no llama a
+Higgsfield ni a ElevenLabs y no baja nada de la red (sirve aunque las URLs
+de Higgsfield hayan expirado):
+
+- **Clips**: `CLIPS_DIR/<sceneId>.mp4` (default `./data/clips`), uno por escena.
+- **Audio**: el `narrationAudioPath` que cada escena ya guardó en `/narration`.
+- **Orden**: el de `story.scenes()`. **Subtítulos**: los de `StorySubtitleBuilder`
+  (la pista en inglés usa `CaptionTranslationService`, o sea una llamada a Claude).
+- **Salida**: `OUTPUT_DIR/<storyId>/` (default `./data/output`): `<storyId>.mp4`,
+  `<storyId>.es.srt` (el quemado), `<storyId>.en.srt` y `work/` con los intermedios.
+  La respuesta devuelve las rutas absolutas (`videoPath`, `srtEsPath`, `srtEnPath`).
+- Si falta algún clip o audio responde **400** con `missing` (escena, tipo y ruta
+  absoluta esperada de cada archivo), antes de escribir nada o correr ffmpeg.
 
 El último endpoint tapa un hueco real que encontré armando esto:
 `generateApprovedScenes` solo dispara la generación en Higgsfield y deja la
@@ -328,7 +346,7 @@ ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID
 
 Opcionales (con default): `API_PORT` (8080, mapeado a `server.port` en
 `application.yml`), `DATA_DIR` (`./data/stories`), `AUDIO_DIR`
-(`./data/audio`). Esto resuelve, de la forma más simple posible, el
+(`./data/audio`), `CLIPS_DIR` (`./data/clips`), `OUTPUT_DIR` (`./data/output`). Esto resuelve, de la forma más simple posible, el
 pendiente de "manejo de credenciales" — variables de entorno alcanzan para
 un piloto de una persona; un secret manager sería sobre-ingeniería hoy.
 

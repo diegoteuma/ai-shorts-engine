@@ -30,3 +30,7 @@ elevenlabs:
 engine:
   data-dir: ${DATA_DIR:./data/stories}
   audio-dir: ${AUDIO_DIR:./data/audio}
+  # Montaje (POST /stories/{id}/montage): entrada <clips-dir>/<sceneId>.mp4,
+  # salida <output-dir>/<storyId>/<storyId>.mp4 (+ .es.srt / .en.srt / work/).
+  clips-dir: ${CLIPS_DIR:./data/clips}
+  output-dir: ${OUTPUT_DIR:./data/output}

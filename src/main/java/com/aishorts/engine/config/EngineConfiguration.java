@@ -11,11 +11,16 @@ import com.aishorts.engine.higgsfield.HiggsfieldClient;
 import com.aishorts.engine.higgsfield.HiggsfieldConfig;
 import com.aishorts.engine.higgsfield.HiggsfieldRestClient;
 import com.aishorts.engine.higgsfield.KnownHiggsfieldPricing;
+import com.aishorts.engine.montage.AssetDownloader;
+import com.aishorts.engine.montage.FfmpegRunner;
+import com.aishorts.engine.montage.StoryMontageService;
+import com.aishorts.engine.montage.VideoMontageBuilder;
 import com.aishorts.engine.persistence.JsonFileStoryRepository;
 import com.aishorts.engine.persistence.StoryRepository;
 import com.aishorts.engine.script.ClaudeScriptDraftingService;
 import com.aishorts.engine.script.ScriptDraftingService;
 import com.aishorts.engine.script.StoryDraftingService;
+import com.aishorts.engine.subtitles.StorySubtitleBuilder;
 import com.aishorts.engine.tts.ElevenLabsTtsService;
 import com.aishorts.engine.tts.TtsConfig;
 import com.aishorts.engine.tts.TtsService;
@@ -125,5 +130,21 @@ public class EngineConfiguration {
     @Qualifier("narrationAudioDir")
     Path narrationAudioDir(@Value("${engine.audio-dir}") String audioDir) {
         return Path.of(audioDir);
+    }
+
+    @Bean
+    StoryMontageService storyMontageService(
+            CaptionTranslationService captionTranslationService,
+            @Qualifier("narrationAudioDir") Path narrationAudioDir,
+            @Value("${engine.clips-dir}") String clipsDir,
+            @Value("${engine.output-dir}") String outputDir
+    ) {
+        return new StoryMontageService(
+                new VideoMontageBuilder(new FfmpegRunner(), new AssetDownloader()),
+                new StorySubtitleBuilder(captionTranslationService),
+                Path.of(clipsDir),
+                narrationAudioDir,
+                Path.of(outputDir)
+        );
     }
 }
