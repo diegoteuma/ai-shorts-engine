@@ -16,7 +16,6 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.net.InetSocketAddress;
@@ -27,8 +26,10 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
+import static com.aishorts.engine.montage.SyntheticMedia.generateColorClip;
+import static com.aishorts.engine.montage.SyntheticMedia.generateSineAudio;
+import static com.aishorts.engine.montage.SyntheticMedia.probeResolution;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -164,50 +165,5 @@ class VideoMontageBuilderFfmpegTest {
         } finally {
             exchange.close();
         }
-    }
-
-    // --- generación de medios sintéticos con ffmpeg -f lavfi ------------------------------
-
-    private static void generateColorClip(Path output, String color) throws Exception {
-        runProcess(List.of(
-                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                "-f", "lavfi", "-i", "color=c=" + color + ":s=320x240:d=1",
-                "-c:v", "mpeg4", "-pix_fmt", "yuv420p", output.toString()));
-    }
-
-    private static void generateSineAudio(Path output) throws Exception {
-        runProcess(List.of(
-                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
-                "-c:a", "pcm_s16le", output.toString()));
-    }
-
-    private static int[] probeResolution(Path video) throws Exception {
-        String out = runProcess(List.of(
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
-                "-show_entries", "stream=width,height", "-of", "csv=p=0", video.toString()));
-        String[] parts = out.trim().split(",");
-        return new int[] {Integer.parseInt(parts[0]), Integer.parseInt(parts[1])};
-    }
-
-    private static String runProcess(List<String> command) throws IOException, InterruptedException {
-        ProcessBuilder processBuilder = new ProcessBuilder(command);
-        processBuilder.redirectErrorStream(true);
-        Process process = processBuilder.start();
-
-        String output;
-        try (InputStream in = process.getInputStream()) {
-            output = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        }
-
-        boolean finished = process.waitFor(60, TimeUnit.SECONDS);
-        if (!finished) {
-            process.destroyForcibly();
-            throw new IllegalStateException("El comando no terminó a tiempo: " + command + "\n" + output);
-        }
-        if (process.exitValue() != 0) {
-            throw new IllegalStateException("El comando falló (" + process.exitValue() + "): " + command + "\n" + output);
-        }
-        return output;
     }
 }

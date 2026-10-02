@@ -28,8 +28,16 @@ public final class AssetDownloader {
         this.httpClient = httpClient;
     }
 
-    /** Descarga assetUrl a destination, sobreescribiendo si ya existe. */
+    /**
+     * Descarga assetUrl a destination, sobreescribiendo si ya existe. Una
+     * URL file:// no toca la red: copia el archivo local (los clips que ya
+     * están en disco, cuando la URL de Higgsfield pudo haber expirado).
+     */
     public Path download(String assetUrl, Path destination) {
+        URI uri = URI.create(assetUrl);
+        if ("file".equalsIgnoreCase(uri.getScheme())) {
+            return copyLocalFile(Path.of(uri), destination);
+        }
         try {
             Files.createDirectories(destination.getParent());
             HttpRequest request = HttpRequest.newBuilder(URI.create(assetUrl))
@@ -51,6 +59,18 @@ public final class AssetDownloader {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new FfmpegException("Se interrumpió la descarga de '" + assetUrl + "'.", e);
+        }
+    }
+
+    private static Path copyLocalFile(Path source, Path destination) {
+        if (!Files.isRegularFile(source)) {
+            throw new FfmpegException("No existe el archivo local '" + source + "'.");
+        }
+        try {
+            Files.createDirectories(destination.getParent());
+            return Files.copy(source, destination, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new FfmpegException("No se pudo copiar '" + source + "' a '" + destination + "'.", e);
         }
     }
 }
