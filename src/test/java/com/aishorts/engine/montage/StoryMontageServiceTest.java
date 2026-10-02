@@ -53,8 +53,8 @@ class StoryMontageServiceTest {
 
         Story story = storyWithSixScenes("1", audioDir);
         // Solo la primera escena tiene su clip; a la segunda le falta además el audio.
-        generateColorClip(clipsDir.resolve("1-gancho.mp4"), "red");
-        Files.delete(audioDir.resolve("1-explicacion.mp3"));
+        generateColorClip(clipsDir.resolve("tunguska-gancho.mp4"), "red");
+        Files.delete(audioDir.resolve("tunguska-explicacion.mp3"));
 
         // Un binario de ffmpeg que no existe: si el servicio llegara a correr
         // ffmpeg fallaría con FfmpegException, no con MissingMontageInputsException.
@@ -67,21 +67,21 @@ class StoryMontageServiceTest {
                     List<MissingMontageInput> missing = ((MissingMontageInputsException) e).missing();
                     assertThat(missing).extracting(MissingMontageInput::sceneId, MissingMontageInput::kind)
                             .containsExactly(
-                                    org.assertj.core.groups.Tuple.tuple("1-explicacion", "clip"),
-                                    org.assertj.core.groups.Tuple.tuple("1-explicacion", "audio"),
-                                    org.assertj.core.groups.Tuple.tuple("1-contexto", "clip"),
-                                    org.assertj.core.groups.Tuple.tuple("1-giro", "clip"),
-                                    org.assertj.core.groups.Tuple.tuple("1-consecuencia", "clip"),
-                                    org.assertj.core.groups.Tuple.tuple("1-cierre", "clip"));
+                                    org.assertj.core.groups.Tuple.tuple("tunguska-explicacion", "clip"),
+                                    org.assertj.core.groups.Tuple.tuple("tunguska-explicacion", "audio"),
+                                    org.assertj.core.groups.Tuple.tuple("tunguska-contexto", "clip"),
+                                    org.assertj.core.groups.Tuple.tuple("tunguska-giro", "clip"),
+                                    org.assertj.core.groups.Tuple.tuple("tunguska-consecuencia", "clip"),
+                                    org.assertj.core.groups.Tuple.tuple("tunguska-cierre", "clip"));
                     assertThat(missing.get(0).expectedPath())
-                            .isEqualTo(clipsDir.resolve("1-explicacion.mp4").toAbsolutePath().toString());
+                            .isEqualTo(clipsDir.resolve("tunguska-explicacion.mp4").toAbsolutePath().toString());
                     assertThat(missing.get(1).expectedPath())
-                            .isEqualTo(audioDir.resolve("1-explicacion.mp3").toAbsolutePath().toString());
+                            .isEqualTo(audioDir.resolve("tunguska-explicacion.mp3").toAbsolutePath().toString());
                     assertThat(e.getMessage())
-                            .contains("1-explicacion: falta el clip de video '1-explicacion.mp4', se espera en "
-                                    + clipsDir.resolve("1-explicacion.mp4").toAbsolutePath())
-                            .contains("1-explicacion: falta el audio de narración '1-explicacion.mp3', se espera en "
-                                    + audioDir.resolve("1-explicacion.mp3").toAbsolutePath());
+                            .contains("tunguska-explicacion: falta el clip de video 'tunguska-explicacion.mp4', se espera en "
+                                    + clipsDir.resolve("tunguska-explicacion.mp4").toAbsolutePath())
+                            .contains("tunguska-explicacion: falta el audio de narración 'tunguska-explicacion.mp3', se espera en "
+                                    + audioDir.resolve("tunguska-explicacion.mp3").toAbsolutePath());
                 });
 
         // Falló antes de escribir .srt o intermedios.
@@ -130,12 +130,12 @@ class StoryMontageServiceTest {
         assertThat(result.srtEnPath()).isEqualTo(storyOutputDir.resolve("1.en.srt"));
         assertThat(result.videoPath()).isRegularFile();
         assertThat(probeResolution(result.videoPath())).containsExactly(1080, 1920);
-        assertThat(Files.readString(result.srtEsPath())).contains("narración 1-gancho");
-        assertThat(Files.readString(result.srtEnPath())).contains("EN narración 1-gancho");
+        assertThat(Files.readString(result.srtEsPath())).contains("narración tunguska-gancho");
+        assertThat(Files.readString(result.srtEnPath())).contains("EN narración tunguska-gancho");
         // El clip se copió del disco local a work/, en el orden de story.scenes().
-        assertThat(result.workDir().resolve("1-gancho-raw.mp4")).isRegularFile();
+        assertThat(result.workDir().resolve("tunguska-gancho-raw.mp4")).isRegularFile();
         assertThat(Files.readString(result.workDir().resolve("concat-list.txt")))
-                .containsSubsequence("1-gancho", "1-explicacion", "1-contexto", "1-giro", "1-consecuencia", "1-cierre");
+                .containsSubsequence("tunguska-gancho", "tunguska-explicacion", "tunguska-contexto", "tunguska-giro", "tunguska-consecuencia", "tunguska-cierre");
     }
 
     // --- helpers ----------------------------------------------------------------------------
