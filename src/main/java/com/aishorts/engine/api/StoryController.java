@@ -6,6 +6,7 @@ import com.aishorts.engine.approval.PromptDecision;
 import com.aishorts.engine.approval.StoryApprovalService;
 import com.aishorts.engine.difficulty.DifficultyFactors;
 import com.aishorts.engine.domain.Story;
+import com.aishorts.engine.drafts.StoryIndex;
 import com.aishorts.engine.persistence.SnapshotMapper;
 import com.aishorts.engine.persistence.StoryRepository;
 import com.aishorts.engine.script.StoryBrief;
@@ -16,7 +17,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,7 +44,7 @@ import java.util.UUID;
  *
  * <pre>
  * POST   /stories                         crear (StoryBrief -> StoryDraftingService)
- * GET    /stories                         listar todas
+ * GET    /stories                         listar todas (resumen: id, title, topic, progress)
  * GET    /stories/{id}                    ver el estado completo de una
  * POST   /stories/{id}/tiers              proposeTiersForReview
  * POST   /stories/{id}/prompt-decisions   applyPromptDecisions   (PUERTA 1)
@@ -65,26 +65,30 @@ public class StoryController {
     private final StoryDraftingService draftingService;
     private final StoryRepository repository;
     private final Path narrationAudioDir;
+    private final StoryIndex storyIndex;
 
     public StoryController(
             StoryApprovalService approvalService,
             StoryDraftingService draftingService,
             StoryRepository repository,
-            @Qualifier("narrationAudioDir") Path narrationAudioDir
+            @Qualifier("narrationAudioDir") Path narrationAudioDir,
+            StoryIndex storyIndex
     ) {
         this.approvalService = approvalService;
         this.draftingService = draftingService;
         this.repository = repository;
         this.narrationAudioDir = narrationAudioDir;
+        this.storyIndex = storyIndex;
     }
 
+    /**
+     * Resumen {id, title, topic, progress} por historia. Cada archivo se lee
+     * por separado (StoryIndex): uno corrupto aparece como {id, error} y no
+     * rompe la lista. El estado completo de una sigue en GET /stories/{id}.
+     */
     @GetMapping
-    public List<Object> listStories() {
-        List<Object> stories = new ArrayList<>();
-        for (Story story : repository.findAll()) {
-            stories.add(SnapshotMapper.toMap(story.toSnapshot()));
-        }
-        return stories;
+    public List<Map<String, Object>> listStories() {
+        return storyIndex.summaries();
     }
 
     @PostMapping

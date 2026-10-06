@@ -229,7 +229,7 @@ public final class DraftValidator {
                     if (source == null || source.url == null) {
                         continue;
                     }
-                    if (false) {
+                    if (!DraftRules.isResearched(source.url, researched)) {
                         violations.add(Violation.softClaim("SOURCE_NOT_RESEARCHED", claimId, "La URL " + source.url
                                 + " de la claim '" + claimId + "' no aparece entre los resultados de búsqueda: la claim queda SIN_VERIFICAR."));
                     }

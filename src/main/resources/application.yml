@@ -14,7 +14,7 @@ spring:
 # de arrancar con un valor vacío.
 claude:
   api-key: ${CLAUDE_API_KEY}
-  model: claude-sonnet-5
+  model: ${CLAUDE_MODEL:claude-sonnet-5-5}
 
 higgsfield:
   base-url: ${HIGGSFIELD_BASE_URL}
@@ -30,3 +30,53 @@ elevenlabs:
 engine:
   data-dir: ${DATA_DIR:./data/stories}
   audio-dir: ${AUDIO_DIR:./data/audio}
+
+# Generador de historias (paso previo al pipeline: propuestas, borrador con
+# búsqueda web y PUERTA 0). Usa la misma API key y modelo de claude.* de
+# arriba. Nada de esto llama a Higgsfield ni a ElevenLabs.
+app:
+  drafts:
+    dir: ${DRAFTS_DIR:./data/drafts}
+    # Si el archivo no está en el classpath, el arranque falla con un mensaje claro.
+    rules-resource: prompts/story-generator-rules.md
+    web-search:
+      enabled: ${CLAUDE_WEB_SEARCH_ENABLED:true}
+      # web_search_20260318 usa filtrado dinámico (code execution) por
+      # defecto. Si el modelo la rechaza, se reintenta una vez con
+      # fallback-tool-version y allowed_callers [direct].
+      tool-version: ${CLAUDE_WEB_SEARCH_TOOL_VERSION:web_search_20260318}
+      allowed-callers: []
+      fallback-tool-version: ${CLAUDE_WEB_SEARCH_FALLBACK_TOOL_VERSION:web_search_20250305}
+      max-uses-draft: ${CLAUDE_WEB_SEARCH_MAX_USES:10}
+      max-uses-proposals: ${CLAUDE_WEB_SEARCH_MAX_USES_PROPOSALS:3}
+    # Timeout de lectura de cada llamada a Claude (una búsqueda web tarda).
+    read-timeout-seconds: ${CLAUDE_READ_TIMEOUT_SECONDS:180}
+    max-pause-continuations: 5
+    words-per-second: 2.65
+    min-total-words: 92
+    max-total-words: 104
+    min-scene-seconds: 3
+    max-scene-seconds: 8
+    # Rangos sugeridos por escena (tabla de la sección 4 de las reglas): solo advertencia.
+    scene-word-ranges:
+      GANCHO: { min: 10, max: 14 }
+      EXPLICACION: { min: 17, max: 21 }
+      CONTEXTO: { min: 16, max: 20 }
+      GIRO: { min: 13, max: 17 }
+      CONSECUENCIA: { min: 16, max: 20 }
+      CIERRE: { min: 8, max: 12 }
+    style-anchor: "Hyperrealistic cinematic documentary footage, vertical 9:16 composition"
+    # Palabras completas, sin distinguir mayúsculas. Cualquiera de estas en un visualPrompt es violación dura.
+    forbidden-visual-terms: [animated, animation, diagram, illustration, vector, cartoon, infographic,
+                             "mushroom cloud", crater, impact, crash, "ground blast"]
+    # Heurística de "bloque de negativos" (el modelo de video no tiene prompt negativo).
+    negative-prompt-terms: [avoid, "do not", "does not", "don't", "must not", never, "negative prompt", without]
+    # Una entrada cubre sus subdominios; si empieza con "." es un sufijo (.edu, .gov).
+    tier-a-domains: [nasa.gov, usgs.gov, esa.int, noaa.gov, doi.org, nature.com, science.org, pnas.org,
+                     agupubs.onlinelibrary.wiley.com, iopscience.iop.org, aanda.org, sciencedirect.com,
+                     link.springer.com, royalsocietypublishing.org, nhm.ac.uk, amnh.org, unesco.org, who.int,
+                     .edu, .gov, .ac.uk, .edu.mx, .gob.mx]
+    tier-b-domains: [britannica.com, smithsonianmag.com, nationalgeographic.com, scientificamerican.com,
+                     newscientist.com, sciencenews.org, bbc.com, bbc.co.uk, history.com, livescience.com, space.com]
+    # Sirven para orientarse pero no cuentan como fuente (ni tier A ni B).
+    orientation-only-domains: [wikipedia.org]

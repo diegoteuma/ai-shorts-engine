@@ -1,5 +1,6 @@
 package com.aishorts.engine.api;
 
+import com.aishorts.engine.drafts.DraftException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -16,6 +17,17 @@ class ApiExceptionHandler {
     @ExceptionHandler(ApiError.class)
     ResponseEntity<Map<String, Object>> handleApiError(ApiError e) {
         return ResponseEntity.status(e.status()).body(Map.of("error", e.getMessage()));
+    }
+
+    /** Errores del generador de historias (400/404/409/422/502), con las violaciones cuando el borrador no es aprobable. */
+    @ExceptionHandler(DraftException.class)
+    ResponseEntity<Map<String, Object>> handleDraftException(DraftException e) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", e.getMessage());
+        if (!e.violations().isEmpty()) {
+            body.put("violations", e.violations());
+        }
+        return ResponseEntity.status(e.status()).body(body);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
