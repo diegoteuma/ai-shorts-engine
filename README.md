@@ -57,9 +57,17 @@ com.aishorts.engine
 │                   final es tuya, en la puerta de aprobación de prompts.
 │
 ├── claude/         ClaudeMessagesClient: cliente HTTP de bajo nivel para la
-│                   Messages API de Claude, usado por script/ (el único
-│                   consumidor de texto-LLM del proyecto). ClaudeConfig
-│                   guarda apiKey/model/baseUrl.
+│                   Messages API de Claude, usado por script/ (sendMessage,
+│                   solo texto) y por drafts/ (createMessage: body completo
+│                   con tools y bloques crudos, con timeout de lectura).
+│                   ClaudeConfig guarda apiKey/model/baseUrl.
+│
+├── drafts/         Generador de historias, el paso PREVIO al pipeline:
+│                   propuestas de tema y borradores escritos por Claude con
+│                   búsqueda web, validados por el servidor (DraftValidator,
+│                   DraftNormalizer) y revisados en la PUERTA 0. Al aprobar,
+│                   la Story se crea por el mismo camino que POST /stories.
+│                   Ver "Generador de historias" abajo.
 │
 ├── tts/            TtsService (interfaz) y ElevenLabsTtsService: sintetiza
 │                   el audio de narración vía el endpoint with-timestamps de
@@ -150,6 +158,95 @@ com.aishorts.engine
   puerta 1 recalcula `Scene.targetDuration` y por lo tanto
   `Story.totalTargetDuration()`.
 
+## Generador de historias (PUERTA 0)
+
+Un paso **previo** al pipeline: Claude (con búsqueda web) propone temas y
+escribe el borrador; vos lo revisás; recién al aprobarlo se crea la Story.
+De ahí en adelante el pipeline sigue **exactamente igual** (`/tiers`,
+PUERTA 1, narración, costos, PUERTA 2, generación). Nada de este paso llama
+a Higgsfield ni a ElevenLabs.
+
+```
+POST /story-drafts/proposals        {focus?}  -> 5 temas candidatos (no guarda nada; búsqueda web, máx. 3)
+POST /story-drafts                  {topic, rejectedDraftId?}  -> borrador PENDING_REVIEW en data/drafts/<id>.json
+GET  /story-drafts                  resumen (id, título, tema, status, # violaciones duras/blandas)
+GET  /story-drafts/{id}             borrador completo (claims, fuentes, what-if, violaciones, researchedUrls, usage)
+POST /story-drafts/{id}/decision    PUERTA 0: {decision: APPROVE|REJECT, note?, narrationEdits?, promptEdits?, acknowledgeUnverified?}
+         │
+         └─ APPROVE -> Story nueva en data/stories (= POST /stories) -> POST /stories/{id}/tiers -> ...
+```
+
+- **System prompt** = `src/main/resources/prompts/story-generator-rules.md`
+  (sin modificar; si falta, el arranque falla) + un bloque de contexto
+  (modo, fecha de hoy, búsqueda web, `existingStories` de `data/stories` y
+  de los borradores no rechazados).
+- **Streaming**: las llamadas al generador usan `"stream": true` (SSE) sobre
+  HTTP/1.1. Una llamada con búsqueda web tarda minutos y, sin streaming, la
+  conexión queda sin tráfico; en una red con inspección TLS se observó que
+  la cortaban (`Connection reset`). Con streaming llegan eventos y pings
+  mientras Claude trabaja. Si estás detrás de inspección TLS, Java además
+  necesita confiar en la CA corporativa: arrancá con
+  `-Djavax.net.ssl.trustStoreType=Windows-ROOT`.
+- **Borrador**: una pasada con búsqueda web (maneja `pause_turn` reenviando
+  los bloques intactos) → JSON del primer `{` al último `}` → normalización →
+  validación. Si hay violaciones **duras**, UN reintento sin herramientas con
+  el JSON anterior y las violaciones como feedback (las URLs consultadas en
+  la primera pasada se conservan). Si vuelve a fallar, el borrador se guarda
+  igual, con las violaciones visibles.
+- **El servidor no le cree al modelo**: recalcula palabras, segundos
+  (2.65 palabras/s), `checks`, la fecha de consulta y el tier de cada fuente
+  (por dominio, listas configurables; Wikipedia sirve para orientarse pero no
+  cuenta). Una URL que no salió de la búsqueda deja la claim `SIN_VERIFICAR`;
+  una claim de las escenas 1-3 con menos de 2 fuentes A/B de dominios
+  distintos queda con confianza `BAJA`.
+- **Reglas duras** (bloquean la aprobación): 6 escenas GANCHO..CIERRE con
+  order 1-6, slug válido y libre, id de escena `<slug>-<rol>`, 92-104 palabras,
+  cada escena 3-8 s, claims referenciadas existentes (también las del
+  what-if), escenas 1-3 con claims HECHO/ESTIMACION, escenas 4-5 con what-if y
+  claims HIPOTESIS, y `visualPrompt` sin palabras prohibidas ni bloques de
+  negativos. **Blandas** (avisos): palabras fuera de la tabla por rol, falta
+  el ancla de estilo, URL no consultada, fuentes débiles, tema repetido,
+  dominio sin tier, slug renombrado.
+- **Nunca se sobrescribe** un borrador ni una historia: si el slug choca, el
+  servidor lo renombra (`slug-2`, con los ids de escena re-prefijados) y lo
+  avisa.
+- **PUERTA 0**: REJECT exige nota (se le pasa a Claude si regenerás con
+  `rejectedDraftId`). APPROVE aplica las ediciones, recalcula y revalida; con
+  violaciones duras responde 422 y no crea nada. Si quedan claims
+  `SIN_VERIFICAR` o de confianza `BAJA`, exige `acknowledgeUnverified: true`.
+  La Story se arma con `StoryDraftingService.draftStory` (el mismo método de
+  POST /stories) pero con las escenas revisadas en vez de volver a llamar a
+  Claude, y solo lleva los campos del pipeline.
+
+> **La verificación humana en la PUERTA 0 es obligatoria.** Que una claim
+> diga `VERIFICADO` solo significa que su URL apareció en los resultados de
+> búsqueda, no que la página diga lo que el modelo afirma. Abrí las fuentes
+> de las escenas 1-3 y confirmá cifras, fechas y lugares antes de aprobar.
+
+**Costo**: la búsqueda web cuesta **10 USD por cada 1.000 búsquedas**, más
+los tokens normales (los resultados de búsqueda cuentan como tokens de
+entrada). Un borrador usa como máximo 10 búsquedas (≈ 0,10 USD) más tokens,
+y las propuestas como máximo 3. Cada borrador guarda su consumo real en
+`usage` (`inputTokens`, `outputTokens`, `webSearchRequests`).
+
+Variables de entorno nuevas (todas opcionales, con default):
+
+```
+CLAUDE_MODEL                              claude-sonnet-5-5 (también lo usa POST /stories)
+CLAUDE_WEB_SEARCH_ENABLED                 true   (false: sin búsqueda; todas las fuentes quedan SIN_VERIFICAR)
+CLAUDE_WEB_SEARCH_MAX_USES                10     (tope de búsquedas por borrador)
+CLAUDE_WEB_SEARCH_MAX_USES_PROPOSALS      3      (tope de búsquedas por pedido de propuestas)
+CLAUDE_WEB_SEARCH_TOOL_VERSION            web_search_20260318
+CLAUDE_WEB_SEARCH_FALLBACK_TOOL_VERSION   web_search_20250305 (se usa con allowed_callers [direct] si el modelo rechaza la anterior)
+CLAUDE_READ_TIMEOUT_SECONDS               180    (máximo sin recibir eventos del stream; no limita la duración total)
+DRAFTS_DIR                                ./data/drafts (ignorado por git)
+```
+
+El resto (palabras por segundo, rangos, palabras prohibidas, listas de
+dominios tier A/B) está en `app.drafts` de `application.yml`. Si la búsqueda
+web está deshabilitada en tu organización de Claude, los endpoints responden
+502 con un mensaje que lo dice.
+
 ## Montaje y subtítulos (manuales)
 
 El pipeline termina en COMPLETED por escena. El montaje y los subtítulos se
@@ -212,7 +309,7 @@ por sí solo. Quien opera la UI decide cuándo llamar al siguiente.
 
 ```
 POST   /stories                         crear (StoryBrief -> StoryDraftingService)
-GET    /stories                         listar todas
+GET    /stories                         listar todas: {id, title, topic, progress} (un JSON corrupto aparece como {id, error})
 GET    /stories/{id}                    ver el estado completo de una
 POST   /stories/{id}/tiers              proposeTiersForReview
 POST   /stories/{id}/prompt-decisions   applyPromptDecisions   (PUERTA 1)
@@ -248,7 +345,7 @@ de narración/costos/generación ahí sí gasta plata, porque para eso está.
 Variables de entorno requeridas:
 
 ```
-CLAUDE_API_KEY, CLAUDE_MODEL
+CLAUDE_API_KEY
 HIGGSFIELD_BASE_URL, HIGGSFIELD_API_KEY_ID, HIGGSFIELD_API_KEY_SECRET
 HIGGSFIELD_MODEL_STANDARD, HIGGSFIELD_MODEL_PREMIUM
 ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID
@@ -256,7 +353,8 @@ ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID
 
 Opcionales (con default): `API_PORT` (8080, mapeado a `server.port` en
 `application.yml`), `DATA_DIR` (`./data/stories`), `AUDIO_DIR`
-(`./data/audio`). Esto resuelve, de la forma más simple posible, el
+(`./data/audio`), `CLAUDE_MODEL` (`claude-sonnet-5-5`) y las del generador
+de historias (ver "Generador de historias" arriba). Esto resuelve, de la forma más simple posible, el
 pendiente de "manejo de credenciales" — variables de entorno alcanzan para
 un piloto de una persona; un secret manager sería sobre-ingeniería hoy.
 
@@ -304,6 +402,14 @@ mvn test
   a punta vía HTTP real (`@SpringBootTest`), con los `Fake*` inyectados por
   `@Primary` en vez de los clientes reales, más el reinicio de persistencia
   simulado (ver "Persistencia" arriba).
+- `drafts/`: el generador de historias, con **cero red**. `DraftValidatorTest`
+  tiene un test por cada regla dura y blanda (sobre un borrador "de oro" que
+  las cumple todas); `ClaudeStoryDraftGeneratorTest` prueba `pause_turn`,
+  citas, uso, el 400 de "web search no habilitada" y el fallback de versión
+  contra un `HttpServer` local; los `*ApiTest` recorren la API con un
+  `FakeStoryDraftGenerator` (`@Primary`) y Higgsfield, ElevenLabs y el
+  guionado de POST /stories como `@MockBean`, verificando con
+  `verifyNoInteractions` que el flujo nuevo nunca los toca.
 
 ## Pendiente / próximos pasos
 

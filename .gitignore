@@ -2,3 +2,6 @@
 /target/
 /.idea/
 /audio/
+
+# Borradores del generador de historias (PUERTA 0): estado local, no se versiona
+/data/drafts/
