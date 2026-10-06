@@ -1,6 +1,5 @@
 package com.aishorts.engine.demo;
 
-import com.aishorts.engine.captions.CaptionTranslationService;
 import com.aishorts.engine.domain.GenerationStatus;
 import com.aishorts.engine.domain.Story;
 import com.aishorts.engine.duration.WordsPerSecondDurationEstimator;
@@ -42,9 +41,9 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
  * instancia NUEVA apuntando al mismo directorio, y confirmar que se relee
  * con exactamente el mismo estado.
  *
- * Reemplaza los cuatro beans "reales" que EngineConfiguration conecta a
- * servicios pagos (HiggsfieldClient, TtsService, ScriptDraftingService,
- * CaptionTranslationService) por los Fake* del paquete demo — @Primary les
+ * Reemplaza los tres beans "reales" que EngineConfiguration conecta a
+ * servicios pagos (HiggsfieldClient, TtsService, ScriptDraftingService)
+ * por los Fake* del paquete demo — @Primary les
  * gana a los beans reales sin tocar EngineConfiguration, así que esto no
  * gasta ni depende de ninguna red real, igual que DemoRunner. Vive en el
  * paquete demo porque los Fake* son package-private a propósito (no son API
@@ -214,12 +213,6 @@ class StoryApiPersistenceRestartTest {
         @Primary
         ScriptDraftingService fakeScriptDraftingService() {
             return new FakeScriptDraftingService();
-        }
-
-        @Bean
-        @Primary
-        CaptionTranslationService fakeCaptionTranslationService() {
-            return new FakeCaptionTranslationService();
         }
     }
 }

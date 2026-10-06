@@ -19,12 +19,8 @@ import com.aishorts.engine.higgsfield.HiggsfieldConfig;
 import com.aishorts.engine.script.ScriptDraftingService;
 import com.aishorts.engine.script.StoryBrief;
 import com.aishorts.engine.script.StoryDraftingService;
-import com.aishorts.engine.subtitles.BilingualCaptions;
-import com.aishorts.engine.subtitles.StorySubtitleBuilder;
 import com.aishorts.engine.tts.TtsService;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -53,7 +49,7 @@ import java.util.Map;
  */
 public final class DemoRunner {
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
         DurationBudget durationBudget = DurationBudget.ofSeconds(35, 40);
         NarrationDurationEstimator durationEstimator = WordsPerSecondDurationEstimator.neutralSpanish();
 
@@ -217,9 +213,6 @@ public final class DemoRunner {
             }
         }
         System.out.println("Estado final: " + story.status());
-        System.out.println();
-
-        writeBilingualSrt(story);
     }
 
     private static void printDurationCheck(Story story, DurationBudget budget) {
@@ -239,22 +232,5 @@ public final class DemoRunner {
                 "tunguska-prototipo-consecuencia", new DifficultyFactors(9, 8, 9, 7),
                 "tunguska-prototipo-cierre", new DifficultyFactors(3, 2, 4, 2)
         );
-    }
-
-    private static void writeBilingualSrt(Story story) throws IOException {
-        // En producción, traducir recién acá (narraciones ya finales tras la
-        // puerta 1) evita retraducir cada vez que se revisa un texto.
-        StorySubtitleBuilder subtitleBuilder = new StorySubtitleBuilder(new FakeCaptionTranslationService());
-        BilingualCaptions captions = subtitleBuilder.build(story);
-
-        Path esPath = Path.of("tunguska-demo.es.srt");
-        Path enPath = Path.of("tunguska-demo.en.srt");
-        Files.writeString(esPath, captions.srtEs());
-        Files.writeString(enPath, captions.srtEn());
-
-        System.out.println("--- Subtítulos ---");
-        System.out.println(".srt español (fuente para quemar en el montaje, coincide con el audio): " + esPath.toAbsolutePath());
-        System.out.println(".srt inglés (pista de closed captions subida aparte, no se quema): " + enPath.toAbsolutePath());
-        System.out.println("(el paso de quemado en sí -ffmpeg u otra herramienta sobre el video ya montado- todavía no está construido)");
     }
 }

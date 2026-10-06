@@ -352,7 +352,7 @@ public final class StoryApprovalService {
 
         // Seedance 2.0 genera audio propio por defecto (generate_audio=true)
         // — sin desactivarlo se paga por un audio que igual se descarta
-        // (VideoMontageBuilder pone la narración real encima, ver montage/).
+        // (la narración real se pone encima en la edición manual).
         // STANDARD y PREMIUM comparten el mismo modelo de Higgsfield (ver
         // KnownHiggsfieldPricing), así que esto siempre aplica, sin
         // distinción por tier.

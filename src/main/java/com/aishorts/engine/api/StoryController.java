@@ -6,8 +6,6 @@ import com.aishorts.engine.approval.PromptDecision;
 import com.aishorts.engine.approval.StoryApprovalService;
 import com.aishorts.engine.difficulty.DifficultyFactors;
 import com.aishorts.engine.domain.Story;
-import com.aishorts.engine.montage.MontageResult;
-import com.aishorts.engine.montage.StoryMontageService;
 import com.aishorts.engine.persistence.SnapshotMapper;
 import com.aishorts.engine.persistence.StoryRepository;
 import com.aishorts.engine.script.StoryBrief;
@@ -57,10 +55,6 @@ import java.util.UUID;
  * POST   /stories/{id}/poll-generation    pollGenerationStatus  (llamar seguido hasta que termine)
  * POST   /stories/{id}/reset-generation   resetAllScenesForRegeneration / resetScenesForRegeneration
  *                                          (body omitido -> todas; lista de sceneIds -> parcial; [] -> 400)
- * POST   /stories/{id}/montage            StoryMontageService.montage: video final desde archivos locales
- *                                          (clips en clipsDir/{sceneId}.mp4 + narrationAudioPath de cada
- *                                          escena; no llama a Higgsfield ni a ElevenLabs; si falta algún
- *                                          archivo -> 400 con la lista, antes de correr ffmpeg)
  * </pre>
  */
 @RestController
@@ -71,20 +65,17 @@ public class StoryController {
     private final StoryDraftingService draftingService;
     private final StoryRepository repository;
     private final Path narrationAudioDir;
-    private final StoryMontageService montageService;
 
     public StoryController(
             StoryApprovalService approvalService,
             StoryDraftingService draftingService,
             StoryRepository repository,
-            @Qualifier("narrationAudioDir") Path narrationAudioDir,
-            StoryMontageService montageService
+            @Qualifier("narrationAudioDir") Path narrationAudioDir
     ) {
         this.approvalService = approvalService;
         this.draftingService = draftingService;
         this.repository = repository;
         this.narrationAudioDir = narrationAudioDir;
-        this.montageService = montageService;
     }
 
     @GetMapping
@@ -182,20 +173,6 @@ public class StoryController {
                 : approvalService.resetScenesForRegeneration(story, sceneIds);
         repository.save(story);
         return batchResponse(result, story);
-    }
-
-    @PostMapping("/{id}/montage")
-    public Map<String, Object> montage(@PathVariable("id") String id) {
-        Story story = loadOrNotFound(id);
-        MontageResult result = montageService.montage(story);
-        // El montaje no cambia el estado de la historia, así que no hay nada que guardar.
-        Map<String, Object> map = new LinkedHashMap<>();
-        map.put("videoPath", result.videoPath().toString());
-        map.put("srtEsPath", result.srtEsPath().toString());
-        map.put("srtEnPath", result.srtEnPath().toString());
-        map.put("workDir", result.workDir().toString());
-        map.put("story", SnapshotMapper.toMap(story.toSnapshot()));
-        return map;
     }
 
     // --- helpers ----------------------------------------------------------------------------

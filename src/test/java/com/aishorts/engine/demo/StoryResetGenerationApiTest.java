@@ -1,6 +1,5 @@
 package com.aishorts.engine.demo;
 
-import com.aishorts.engine.captions.CaptionTranslationService;
 import com.aishorts.engine.domain.GenerationStatus;
 import com.aishorts.engine.domain.SceneCostStatus;
 import com.aishorts.engine.domain.Story;
@@ -285,12 +284,6 @@ class StoryResetGenerationApiTest {
         @Primary
         ScriptDraftingService fakeScriptDraftingService() {
             return new FakeScriptDraftingService();
-        }
-
-        @Bean
-        @Primary
-        CaptionTranslationService fakeCaptionTranslationService() {
-            return new FakeCaptionTranslationService();
         }
     }
 }

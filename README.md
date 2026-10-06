@@ -17,8 +17,7 @@ mvn spring-boot:run
 
 `DemoRunner` simula el prototipo Tunguska completo — desde el `StoryBrief`
 (lo que vos ya aprobaste) hasta la generación — contra un LLM y un
-Higgsfield falsos, sin llamar a ninguna red real, y al final escribe
-`tunguska-demo.es.srt` y `tunguska-demo.en.srt`. No pasa por el contexto de
+Higgsfield falsos, sin llamar a ninguna red real. No pasa por el contexto de
 Spring — es un `main()` plano, independiente de la API.
 
 ## Spring Boot + Jackson
@@ -58,9 +57,9 @@ com.aishorts.engine
 │                   final es tuya, en la puerta de aprobación de prompts.
 │
 ├── claude/         ClaudeMessagesClient: cliente HTTP de bajo nivel para la
-│                   Messages API de Claude, compartido por script/ y
-│                   captions/ (los dos únicos consumidores de texto-LLM del
-│                   proyecto). ClaudeConfig guarda apiKey/model/baseUrl.
+│                   Messages API de Claude, usado por script/ (el único
+│                   consumidor de texto-LLM del proyecto). ClaudeConfig
+│                   guarda apiKey/model/baseUrl.
 │
 ├── tts/            TtsService (interfaz) y ElevenLabsTtsService: sintetiza
 │                   el audio de narración vía el endpoint with-timestamps de
@@ -113,26 +112,6 @@ com.aishorts.engine
 │                     5. generateApprovedScenes → el ÚNICO método que gasta y genera
 │                   Un rechazo en una escena nunca bloquea a las demás del lote.
 │
-├── captions/       CaptionTranslationService: traduce las 6 narraciones
-│                   (español) a inglés en una sola llamada, para la pista de
-│                   subtítulos en inglés — el audio del video sigue siendo
-│                   español, esto es solo texto para leer.
-│                   ClaudeCaptionTranslationService es la implementación real.
-│
-├── subtitles/      StorySubtitleBuilder arma las dos pistas .srt (español e
-│                   inglés) con EXACTAMENTE el mismo timing por escena, para
-│                   que queden sincronizadas con el mismo video. SrtGenerator
-│                   es el formateador de bajo nivel (timing -> texto .srt).
-│
-├── montage/        VideoMontageBuilder arma el video final: baja los clips
-│                   de Higgsfield (AssetDownloader), le pone a cada uno el
-│                   audio de narración de su escena, concatena las 6 en
-│                   orden y quema encima la pista .srt en español (escala y
-│                   rellena a 1080x1920). Tres pasos separados a propósito
-│                   (mux por escena -> concat -> quemado), cada uno con su
-│                   archivo intermedio, para poder diagnosticar cuál falló.
-│                   FfmpegRunner invoca el binario vía ProcessBuilder.
-│
 ├── persistence/    StoryRepository (interfaz) y JsonFileStoryRepository:
 │                   guardan/releen Story completas (todas sus Scene, con su
 │                   estado de aprobación/costo/generación) como un .json por
@@ -148,7 +127,7 @@ com.aishorts.engine
 │                   variables de entorno.
 │
 └── demo/           DemoRunner + los Fake* (HiggsfieldClient, ScriptDraftingService,
-                    CaptionTranslationService): corren el flujo completo del
+                    TtsService): corren el flujo completo del
                     prototipo Tunguska sin tocar ninguna red real.
 ```
 
@@ -171,63 +150,11 @@ com.aishorts.engine
   puerta 1 recalcula `Scene.targetDuration` y por lo tanto
   `Story.totalTargetDuration()`.
 
-## Decisión de subtítulos (ya tomada)
+## Montaje y subtítulos (manuales)
 
-Quemados en español (coincide con el audio narrado, así que solo hace falta
-renderizar una vez) + pistas `.srt` en español e inglés subidas aparte
-(accesibilidad, SEO, alcance en inglés). Motivo: YouTube confirmó que su
-auto-activación de subtítulos al mutear **no aplica a Shorts**, así que una
-pista `.srt` sin quemar no la ve nadie que scrollee mudo — que es la mayoría
-en formato corto vertical. `StorySubtitleBuilder` arma ambas pistas
-sincronizadas y `VideoMontageBuilder` (ver abajo) hace el quemado en sí.
-
-## Montaje/quemado (ya implementado, con ffmpeg)
-
-`VideoMontageBuilder` (paquete `montage/`) arma el video final en 3 pasos,
-cada uno con su archivo intermedio en `workDir` para poder inspeccionar cuál
-falló si algo sale mal:
-
-1. **Por escena**: baja el clip generado (`AssetDownloader`, HTTP real vía
-   `java.net.http.HttpClient`) y le pega el audio de narración de esa escena
-   (`-map 0:v:0 -map 1:a:0 -c:a aac -shortest`).
-2. **Concat**: une las 6 escenas en orden narrativo con el demuxer `concat`
-   de ffmpeg.
-3. **Quemado**: escala/rellena a 1080x1920 (`scale=...force_original_aspect_ratio=decrease,pad=...`)
-   y quema la pista `.srt` en español encima (`subtitles=...`, requiere
-   `libass` — confirmado que el ffmpeg de este sandbox lo tiene compilado).
-
-Esto se probó de verdad, no solo compilando: `VideoMontageBuilderFfmpegTest`
-(paquete `montage/`, en `src/test`) genera clips y audios sintéticos con
-`ffmpeg -f lavfi` (colores sólidos + tonos senoidales), los sirve por un
-servidor HTTP local para ejercitar `AssetDownloader` de punta a punta, y
-corre `VideoMontageBuilder.build(...)` real contra `Scene`/`Story` reales —
-no un script de shell aparte. Confirma que sale un .mp4 de 1080x1920 (vía
-`ffprobe`) y cubre específicamente el caso de la comilla simple de más
-abajo. Necesita ffmpeg/ffprobe instalados, así que está deshabilitado por
-default — correr con `RUN_FFMPEG_TESTS=true mvn test` (ver "Tests" abajo).
-
-Un hallazgo concreto de esa prueba: el filtro `subtitles=` de ffmpeg
-re-parsea su propio argumento `filename` con una segunda pasada de escapeo,
-y **una comilla simple literal en la ruta no sobrevive ninguna combinación
-de backslash-escaping** (desaparece silenciosamente y ffmpeg termina
-buscando un archivo que no existe) — los dos puntos y los espacios sí se
-escapan bien. En vez de perseguir un escapeo perfecto para una ruta
-arbitraria, `VideoMontageBuilder` elimina el problema de raíz: antes de
-quemar, copia el `.srt` a un nombre fijo y controlado (`captions.srt`)
-dentro de `workDir`, así el argumento del filtro nunca depende de un
-nombre de archivo externo.
-
-No está enchufado a `DemoRunner`: los `Fake*` de esa demo (Higgsfield, TTS)
-devuelven bytes de relleno no reproducibles a propósito, para poder probar
-el flujo de aprobaciones sin gastar ni depender de red real — correr
-ffmpeg de verdad contra esos bytes fallaría siempre, sin decir nada sobre
-si el montaje en sí funciona. Por eso el montaje se probó por separado,
-contra medios sintéticos pero *reales* (reproducibles por ffmpeg).
-
-Deliberadamente fuera de esta primera versión (no olvidado): transiciones
-tipo crossfade entre escenas (`xfade`) y overlays de texto puntuales (ej.
-la etiqueta "HIPÓTESIS" de la escena de GIRO) — agregan filtergraphs más
-complejos que conviene verificar en una segunda vuelta.
+El pipeline termina en COMPLETED por escena. El montaje y los subtítulos se
+hacen manualmente con los clips (generatedAssetUrl), el audio
+(narrationAudioPath) y el texto (narrationText) de GET /stories/{id}.
 
 ## Persistencia (Fase 1 — sin nube, sin base de datos)
 
@@ -295,26 +222,9 @@ POST   /stories/{id}/cost-decisions     applyCostDecisions     (PUERTA 2)
 POST   /stories/{id}/generate           generateApprovedScenes
 POST   /stories/{id}/poll-generation    pollGenerationStatus
 POST   /stories/{id}/reset-generation   resetAllScenesForRegeneration / resetScenesForRegeneration
-POST   /stories/{id}/montage            StoryMontageService.montage (video final desde archivos locales)
 ```
 
-### Montaje (`POST /stories/{id}/montage`)
-
-Arma el video final con archivos que ya están en disco — no llama a
-Higgsfield ni a ElevenLabs y no baja nada de la red (sirve aunque las URLs
-de Higgsfield hayan expirado):
-
-- **Clips**: `CLIPS_DIR/<sceneId>.mp4` (default `./data/clips`), uno por escena.
-- **Audio**: el `narrationAudioPath` que cada escena ya guardó en `/narration`.
-- **Orden**: el de `story.scenes()`. **Subtítulos**: los de `StorySubtitleBuilder`
-  (la pista en inglés usa `CaptionTranslationService`, o sea una llamada a Claude).
-- **Salida**: `OUTPUT_DIR/<storyId>/` (default `./data/output`): `<storyId>.mp4`,
-  `<storyId>.es.srt` (el quemado), `<storyId>.en.srt` y `work/` con los intermedios.
-  La respuesta devuelve las rutas absolutas (`videoPath`, `srtEsPath`, `srtEnPath`).
-- Si falta algún clip o audio responde **400** con `missing` (escena, tipo y ruta
-  absoluta esperada de cada archivo), antes de escribir nada o correr ffmpeg.
-
-El último endpoint tapa un hueco real que encontré armando esto:
+El endpoint `poll-generation` tapa un hueco real que encontré armando esto:
 `generateApprovedScenes` solo dispara la generación en Higgsfield y deja la
 escena en `QUEUED` (es asincrónico) — no existía nada que después
 preguntara "¿ya terminó?". Agregué `StoryApprovalService.pollGenerationStatus`
@@ -346,7 +256,7 @@ ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID
 
 Opcionales (con default): `API_PORT` (8080, mapeado a `server.port` en
 `application.yml`), `DATA_DIR` (`./data/stories`), `AUDIO_DIR`
-(`./data/audio`), `CLIPS_DIR` (`./data/clips`), `OUTPUT_DIR` (`./data/output`). Esto resuelve, de la forma más simple posible, el
+(`./data/audio`). Esto resuelve, de la forma más simple posible, el
 pendiente de "manejo de credenciales" — variables de entorno alcanzan para
 un piloto de una persona; un secret manager sería sobre-ingeniería hoy.
 
@@ -379,8 +289,7 @@ sin gastar) pero con persistencia en disco de verdad — ver
 ## Tests
 
 ```bash
-mvn test                       # todo salvo el test de ffmpeg (ver abajo)
-RUN_FFMPEG_TESTS=true mvn test # suite completa, necesita ffmpeg/ffprobe instalados
+mvn test
 ```
 
 - `domain/SceneTest.java`, `domain/StoryTest.java`: los guards de las dos
@@ -391,9 +300,6 @@ RUN_FFMPEG_TESTS=true mvn test # suite completa, necesita ffmpeg/ffprobe instala
   el spec real de Higgsfield (estimateCost local sin red, `video.url`
   anidado, los 6 status reales incluido nsfw/canceled → FAILED) y el fix de
   `"sound": "off"` — contra un `HttpServer` local real, no mocks.
-- `montage/VideoMontageBuilderFfmpegTest.java`: ffmpeg real contra medios
-  sintéticos (ver "Montaje/quemado" arriba). Deshabilitado por default
-  (`@EnabledIfEnvironmentVariable`) porque necesita ffmpeg/ffprobe instalados.
 - `demo/StoryApiPersistenceRestartTest.java`: la API REST completa de punta
   a punta vía HTTP real (`@SpringBootTest`), con los `Fake*` inyectados por
   `@Primary` en vez de los clientes reales, más el reinicio de persistencia
