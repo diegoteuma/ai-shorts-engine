@@ -1,7 +1,6 @@
 package com.aishorts.engine.drafts;
 
 import com.aishorts.engine.claude.ClaudeConfig;
-import com.aishorts.engine.claude.ClaudeMessagesClient;
 import com.aishorts.engine.drafts.StoryDraftGenerator.GeneratorRequest;
 import com.aishorts.engine.drafts.StoryDraftGenerator.GeneratorResult;
 import com.aishorts.engine.drafts.StoryDraftGenerator.Mode;
@@ -54,7 +53,8 @@ class ClaudeStoryDraftGeneratorTest {
 
     private ClaudeStoryDraftGenerator generator() {
         ClaudeConfig config = new ClaudeConfig("test-key", "test-model", "http://127.0.0.1:" + server.getAddress().getPort(), 16000);
-        return new ClaudeStoryDraftGenerator(new ClaudeMessagesClient(config, objectMapper), DraftFixtures.properties());
+        // la misma fábrica que usa DraftsConfiguration en producción
+        return ClaudeStoryDraftGenerator.create(config, objectMapper, DraftFixtures.properties());
     }
 
     private void respond(int status, String body) {
@@ -151,13 +151,37 @@ class ClaudeStoryDraftGeneratorTest {
         assertThat(receivedRequests.get(0)).doesNotContainKey("tools");
     }
 
+    @Test
+    void connectionDroppedMidCall_the502CarriesTheRootCause() {
+        respond(DROP_CONNECTION, "");
+        assertThatThrownBy(() -> generator().generate(draftRequest()))
+                .isInstanceOfSatisfying(DraftException.class, e -> assertThat(e.status()).isEqualTo(502))
+                .hasMessageContaining("Error de red")
+                .hasMessageContaining("| causa: java.io.");
+    }
+
+    @Test
+    void requestsUseHttp11_neverTryToUpgradeToHttp2() {
+        respond(200, "{\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"{}\"}]}");
+        generator().generate(draftRequest());
+        assertThat(receivedUpgradeHeaders).containsExactly("(ninguno)");
+    }
+
+    private static final int DROP_CONNECTION = -1;
+    private final List<String> receivedUpgradeHeaders = new ArrayList<>();
+
     @SuppressWarnings("unchecked")
     private void route(HttpExchange exchange) throws IOException {
         try {
             String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             receivedRequests.add(objectMapper.readValue(requestBody, Map.class));
+            String upgrade = exchange.getRequestHeaders().getFirst("Upgrade");
+            receivedUpgradeHeaders.add(upgrade != null ? upgrade : "(ninguno)");
             int[] status = statuses.poll();
             String body = bodies.poll();
+            if (status != null && status[0] == DROP_CONNECTION) {
+                return; // cierra sin responder: el cliente ve la conexión cortada
+            }
             if (status == null) {
                 status = new int[]{500};
                 body = "{\"error\":\"sin respuesta encolada\"}";

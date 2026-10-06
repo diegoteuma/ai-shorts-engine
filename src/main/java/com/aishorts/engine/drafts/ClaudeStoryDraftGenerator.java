@@ -1,11 +1,14 @@
 package com.aishorts.engine.drafts;
 
 import com.aishorts.engine.claude.ClaudeApiException;
+import com.aishorts.engine.claude.ClaudeConfig;
 import com.aishorts.engine.claude.ClaudeHttpException;
 import com.aishorts.engine.claude.ClaudeMessagesClient;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -43,6 +46,15 @@ public final class ClaudeStoryDraftGenerator implements StoryDraftGenerator {
     public ClaudeStoryDraftGenerator(ClaudeMessagesClient client, DraftsProperties properties) {
         this.client = client;
         this.properties = properties;
+    }
+
+    /**
+     * El generador tal como se usa en producción: cliente en HTTP/1.1. Una
+     * llamada con búsqueda web pasa minutos sin tráfico, y en una red con
+     * inspección TLS se observó que la conexión se cortaba a mitad de camino.
+     */
+    public static ClaudeStoryDraftGenerator create(ClaudeConfig config, ObjectMapper objectMapper, DraftsProperties properties) {
+        return new ClaudeStoryDraftGenerator(new ClaudeMessagesClient(config, objectMapper, HttpClient.Version.HTTP_1_1), properties);
     }
 
     @Override
@@ -194,11 +206,33 @@ public final class ClaudeStoryDraftGenerator implements StoryDraftGenerator {
         return lower.contains("allowed_callers") || (toolVersion != null && lower.contains(toolVersion.toLowerCase(Locale.ROOT)));
     }
 
+    /**
+     * 502 con la cadena de causas a la vista (por ejemplo "Error de red ... |
+     * causa: java.io.IOException: connection reset"), y el stack trace
+     * completo en el log: un "Error de red" a secas no permite diagnosticar.
+     */
     private static DraftException toDraftException(ClaudeApiException e) {
         String message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
         if (message.length() > MAX_ERROR_BODY_CHARS) {
             message = message.substring(0, MAX_ERROR_BODY_CHARS) + "…";
         }
-        return new DraftException(502, "Falló la llamada a Claude: " + message, e);
+        String causes = causeChain(e);
+        log.error("Falló la llamada a Claude: {}{}", message, causes, e);
+        return new DraftException(502, "Falló la llamada a Claude: " + message + causes, e);
+    }
+
+    /** " | causa: Clase: mensaje" por cada causa anidada, o "" si no hay. */
+    static String causeChain(Throwable e) {
+        StringBuilder sb = new StringBuilder();
+        Throwable cause = e.getCause();
+        for (int depth = 0; cause != null && cause != e && depth < 5; depth++) {
+            sb.append(" | causa: ").append(cause.getClass().getName());
+            if (cause.getMessage() != null) {
+                sb.append(": ").append(cause.getMessage());
+            }
+            e = cause;
+            cause = cause.getCause();
+        }
+        return sb.toString();
     }
 }

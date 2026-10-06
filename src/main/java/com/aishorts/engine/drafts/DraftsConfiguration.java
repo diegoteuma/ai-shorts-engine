@@ -1,7 +1,6 @@
 package com.aishorts.engine.drafts;
 
 import com.aishorts.engine.claude.ClaudeConfig;
-import com.aishorts.engine.claude.ClaudeMessagesClient;
 import com.aishorts.engine.duration.WordsPerSecondDurationEstimator;
 import com.aishorts.engine.persistence.StoryRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -53,7 +52,7 @@ public class DraftsConfiguration {
 
     @Bean
     StoryDraftGenerator storyDraftGenerator(ClaudeConfig claudeConfig, ObjectMapper objectMapper, DraftsProperties properties) {
-        return new ClaudeStoryDraftGenerator(new ClaudeMessagesClient(claudeConfig, objectMapper), properties);
+        return ClaudeStoryDraftGenerator.create(claudeConfig, objectMapper, properties);
     }
 
     @Bean

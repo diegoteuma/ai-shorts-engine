@@ -35,6 +35,17 @@ public final class ClaudeMessagesClient {
         this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
     }
 
+    /**
+     * Igual que el constructor de arriba pero fijando la versión de HTTP.
+     * HTTP/1.1 evita problemas de HTTP/2 con proxies de inspección TLS
+     * corporativos en llamadas largas (por ejemplo, con búsqueda web).
+     */
+    public ClaudeMessagesClient(ClaudeConfig config, ObjectMapper objectMapper, HttpClient.Version httpVersion) {
+        this.config = config;
+        this.objectMapper = objectMapper;
+        this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).version(httpVersion).build();
+    }
+
     public String sendMessage(String systemPrompt, String userMessage) throws ClaudeApiException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", config.model());
