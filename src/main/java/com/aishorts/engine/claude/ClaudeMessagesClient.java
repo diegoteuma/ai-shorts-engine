@@ -75,6 +75,46 @@ public final class ClaudeMessagesClient {
     }
 
     /**
+     * Manda un body completo a /v1/messages (con tools, varios mensajes,
+     * etc.) y devuelve la respuesta JSON entera, sin interpretar: los
+     * bloques de contenido que no son texto (server_tool_use,
+     * web_search_tool_result, citas, ...) quedan intactos para que quien
+     * llama pueda reenviarlos tal cual (por ejemplo, tras un pause_turn).
+     * Completa model y max_tokens con los de ClaudeConfig si el body no los
+     * trae. A diferencia de sendMessage, aplica un timeout de lectura: una
+     * búsqueda web puede tardar, pero no indefinidamente.
+     */
+    public Map<String, Object> createMessage(Map<String, Object> body, Duration timeout) throws ClaudeApiException {
+        Map<String, Object> fullBody = new LinkedHashMap<>();
+        fullBody.put("model", config.model());
+        fullBody.put("max_tokens", config.maxTokens());
+        fullBody.putAll(body);
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder(URI.create(config.baseUrl() + "/v1/messages"))
+                    .timeout(timeout)
+                    .header("x-api-key", config.apiKey())
+                    .header("anthropic-version", "2023-06-01")
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(fullBody)))
+                    .build();
+
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() / 100 != 2) {
+                throw new ClaudeHttpException(response.statusCode(), response.body());
+            }
+            return objectMapper.readValue(response.body(), MAP_TYPE);
+        } catch (java.net.http.HttpTimeoutException e) {
+            throw new ClaudeApiException("La API de Claude no respondió dentro de " + timeout.toSeconds() + " s", e);
+        } catch (IOException e) {
+            throw new ClaudeApiException("Error de red llamando a la API de Claude", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ClaudeApiException("Llamada a la API de Claude interrumpida", e);
+        }
+    }
+
+    /**
      * Los modelos a veces envuelven el JSON pedido en un bloque de código
      * markdown pese a que se les pide que no lo hagan. Lo usan tanto el
      * guionado como la traducción de subtítulos, para no duplicar el mismo
