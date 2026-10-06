@@ -20,7 +20,9 @@ import java.util.Set;
 
 /**
  * StoryDraftGenerator real: una pasada contra la Messages API de Claude,
- * opcionalmente con la herramienta de búsqueda web del servidor.
+ * opcionalmente con la herramienta de búsqueda web del servidor, siempre
+ * con streaming (ClaudeMessagesClient.createMessageStreaming) para que la
+ * conexión no quede minutos sin tráfico.
  *
  * - pause_turn: el contenido del asistente se reenvía INTACTO (incluidos
  *   encrypted_content y encrypted_index, que la API exige sin cambios),
@@ -112,7 +114,7 @@ public final class ClaudeStoryDraftGenerator implements StoryDraftGenerator {
                 body.put("container", containerId);
             }
 
-            Map<String, Object> response = client.createMessage(body, timeout);
+            Map<String, Object> response = client.createMessageStreaming(body, timeout);
             if (response.get("content") instanceof List<?> content) {
                 assistantBlocks.addAll(content);
             }

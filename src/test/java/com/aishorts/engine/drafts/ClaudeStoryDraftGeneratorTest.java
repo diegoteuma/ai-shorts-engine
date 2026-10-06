@@ -52,9 +52,13 @@ class ClaudeStoryDraftGeneratorTest {
     }
 
     private ClaudeStoryDraftGenerator generator() {
+        return generator(DraftFixtures.properties());
+    }
+
+    private ClaudeStoryDraftGenerator generator(DraftsProperties properties) {
         ClaudeConfig config = new ClaudeConfig("test-key", "test-model", "http://127.0.0.1:" + server.getAddress().getPort(), 16000);
         // la misma fábrica que usa DraftsConfiguration en producción
-        return ClaudeStoryDraftGenerator.create(config, objectMapper, DraftFixtures.properties());
+        return ClaudeStoryDraftGenerator.create(config, objectMapper, properties);
     }
 
     private void respond(int status, String body) {
@@ -152,6 +156,72 @@ class ClaudeStoryDraftGeneratorTest {
     }
 
     @Test
+    void streamCutBeforeMessageStop_is502_neverAHalfBuiltResponse() {
+        respond(RAW_SSE, """
+                event: message_start
+                data: {"type":"message_start","message":{"id":"m","content":[],"usage":{"input_tokens":5,"output_tokens":1}}}
+
+                event: content_block_start
+                data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+                event: content_block_delta
+                data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"{\\"id\\":"}}
+
+                """);
+        assertThatThrownBy(() -> generator().generate(draftRequest()))
+                .isInstanceOfSatisfying(DraftException.class, e -> assertThat(e.status()).isEqualTo(502))
+                .hasMessageContaining("message_stop");
+    }
+
+    @Test
+    void errorEventMidStream_is502WithTheApiError() {
+        respond(RAW_SSE, """
+                event: message_start
+                data: {"type":"message_start","message":{"id":"m","content":[],"usage":{"input_tokens":5,"output_tokens":1}}}
+
+                event: error
+                data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+
+                """);
+        assertThatThrownBy(() -> generator().generate(draftRequest()))
+                .isInstanceOfSatisfying(DraftException.class, e -> assertThat(e.status()).isEqualTo(502))
+                .hasMessageContaining("overloaded_error");
+    }
+
+    @Test
+    void noEventsForLongerThanTheIdleTimeout_abortsWith502() {
+        respond(STALL, "event: ping\ndata: {\"type\":\"ping\"}\n\n");
+        long start = System.nanoTime();
+        assertThatThrownBy(() -> generator(withReadTimeout(DraftFixtures.properties(), 1)).generate(draftRequest()))
+                .isInstanceOfSatisfying(DraftException.class, e -> assertThat(e.status()).isEqualTo(502))
+                .hasMessageContaining("no envió eventos durante 1 s");
+        assertThat(java.time.Duration.ofNanos(System.nanoTime() - start)).isLessThan(java.time.Duration.ofMillis(2_800));
+    }
+
+    @Test
+    void streamLongerThanTheTimeoutInTotal_butWithRegularEvents_completes() {
+        respond(SLOW_SSE, "{\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"{\\\"id\\\":\\\"lento\\\"}\"}]}");
+        long start = System.nanoTime();
+        GeneratorResult result = generator(withReadTimeout(DraftFixtures.properties(), 1)).generate(draftRequest());
+        assertThat(result.text()).isEqualTo("{\"id\":\"lento\"}");
+        assertThat(java.time.Duration.ofNanos(System.nanoTime() - start)).isGreaterThan(java.time.Duration.ofMillis(1_500));
+    }
+
+    @Test
+    void requestsAskForStreaming() {
+        respond(200, "{\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"{}\"}]}");
+        generator().generate(draftRequest());
+        assertThat(receivedRequests.get(0).get("stream")).isEqualTo(true);
+    }
+
+    private static DraftsProperties withReadTimeout(DraftsProperties p, int seconds) {
+        return new DraftsProperties(p.dir(), p.rulesResource(), p.webSearch(), seconds, p.maxPauseContinuations(),
+                p.wordsPerSecond(), p.minTotalWords(), p.maxTotalWords(), p.minSceneSeconds(), p.maxSceneSeconds(),
+                p.sceneWordRanges(), p.styleAnchor(), p.forbiddenVisualTerms(), p.negativePromptTerms(),
+                p.tierADomains(), p.tierBDomains(), p.orientationOnlyDomains());
+    }
+
+    @Test
     void connectionDroppedMidCall_the502CarriesTheRootCause() {
         respond(DROP_CONNECTION, "");
         assertThatThrownBy(() -> generator().generate(draftRequest()))
@@ -186,14 +256,125 @@ class ClaudeStoryDraftGeneratorTest {
                 status = new int[]{500};
                 body = "{\"error\":\"sin respuesta encolada\"}";
             }
+            if (status[0] == SLOW_SSE) {
+                exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+                exchange.sendResponseHeaders(200, 0);
+                try (OutputStream out = exchange.getResponseBody()) {
+                    for (String event : toSse(body).split("(?<=\n\n)")) {
+                        out.write(event.getBytes(StandardCharsets.UTF_8));
+                        out.flush();
+                        sleepQuietly(200); // cada evento llega antes del timeout de inactividad (1 s)
+                    }
+                }
+                return;
+            }
+            if (status[0] == RAW_SSE || status[0] == STALL) {
+                exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+                exchange.sendResponseHeaders(200, 0);
+                OutputStream out = exchange.getResponseBody();
+                out.write(body.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+                if (status[0] == STALL) {
+                    sleepQuietly(3_000); // headers y un ping, después silencio
+                }
+                return; // se cierra sin message_stop (o tras el silencio)
+            }
+            if (status[0] == 200) {
+                // la API real responde en SSE porque el cliente pide "stream": true
+                body = toSse(body);
+                exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+            } else {
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+            }
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(status[0], bytes.length);
             try (OutputStream out = exchange.getResponseBody()) {
                 out.write(bytes);
             }
         } finally {
             exchange.close();
+        }
+    }
+
+    private static final int RAW_SSE = -2;
+    private static final int STALL = -3;
+    private static final int SLOW_SSE = -4;
+
+    /**
+     * Convierte un mensaje completo (como lo devolvería la API sin streaming)
+     * en los eventos SSE que manda la API real con "stream": true: el texto
+     * partido en text_delta, las citas como citations_delta, el input de
+     * server_tool_use como input_json_delta, los demás bloques enteros en
+     * content_block_start, y pings intercalados.
+     */
+    @SuppressWarnings("unchecked")
+    private String toSse(String messageJson) throws IOException {
+        Map<String, Object> message = objectMapper.readValue(messageJson, Map.class);
+        Map<String, Object> usage = (Map<String, Object>) message.getOrDefault("usage", Map.of());
+        StringBuilder sse = new StringBuilder();
+        Map<String, Object> start = new java.util.LinkedHashMap<>();
+        start.put("id", "msg_test");
+        start.put("type", "message");
+        start.put("role", "assistant");
+        start.put("content", List.of());
+        start.put("stop_reason", null);
+        start.put("usage", Map.of("input_tokens", usage.getOrDefault("input_tokens", 0), "output_tokens", 1));
+        if (message.get("container") != null) {
+            start.put("container", message.get("container"));
+        }
+        event(sse, "message_start", Map.of("type", "message_start", "message", start));
+        event(sse, "ping", Map.of("type", "ping"));
+
+        List<Map<String, Object>> content = (List<Map<String, Object>>) message.getOrDefault("content", List.of());
+        for (int i = 0; i < content.size(); i++) {
+            Map<String, Object> block = content.get(i);
+            String type = (String) block.get("type");
+            if ("text".equals(type)) {
+                event(sse, "content_block_start", Map.of("type", "content_block_start", "index", i,
+                        "content_block", Map.of("type", "text", "text", "")));
+                for (Object citation : (List<Object>) block.getOrDefault("citations", List.of())) {
+                    event(sse, "content_block_delta", Map.of("type", "content_block_delta", "index", i,
+                            "delta", Map.of("type", "citations_delta", "citation", citation)));
+                }
+                String text = (String) block.get("text");
+                int half = text.length() / 2;
+                for (String piece : List.of(text.substring(0, half), text.substring(half))) {
+                    event(sse, "content_block_delta", Map.of("type", "content_block_delta", "index", i,
+                            "delta", Map.of("type", "text_delta", "text", piece)));
+                    event(sse, "ping", Map.of("type", "ping"));
+                }
+            } else if ("server_tool_use".equals(type)) {
+                Map<String, Object> base = new java.util.LinkedHashMap<>(block);
+                base.put("input", Map.of());
+                event(sse, "content_block_start", Map.of("type", "content_block_start", "index", i, "content_block", base));
+                String input = objectMapper.writeValueAsString(block.get("input"));
+                int half = input.length() / 2;
+                for (String piece : List.of(input.substring(0, half), input.substring(half))) {
+                    event(sse, "content_block_delta", Map.of("type", "content_block_delta", "index", i,
+                            "delta", Map.of("type", "input_json_delta", "partial_json", piece)));
+                }
+            } else {
+                event(sse, "content_block_start", Map.of("type", "content_block_start", "index", i, "content_block", block));
+            }
+            event(sse, "content_block_stop", Map.of("type", "content_block_stop", "index", i));
+        }
+        Map<String, Object> delta = new java.util.LinkedHashMap<>();
+        delta.put("stop_reason", message.get("stop_reason"));
+        event(sse, "message_delta", Map.of("type", "message_delta", "delta", delta, "usage", usage));
+        event(sse, "message_stop", Map.of("type", "message_stop"));
+        return sse.toString();
+    }
+
+    private void event(StringBuilder sse, String name, Object data) throws IOException {
+        sse.append("event: ").append(name).append('\n')
+                .append("data: ").append(objectMapper.writeValueAsString(data)).append("\n\n");
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 }

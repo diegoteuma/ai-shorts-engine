@@ -3,15 +3,27 @@ package com.aishorts.engine.claude;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Cliente de bajo nivel para la Messages API de Claude, compartido por
@@ -87,41 +99,144 @@ public final class ClaudeMessagesClient {
 
     /**
      * Manda un body completo a /v1/messages (con tools, varios mensajes,
-     * etc.) y devuelve la respuesta JSON entera, sin interpretar: los
-     * bloques de contenido que no son texto (server_tool_use,
-     * web_search_tool_result, citas, ...) quedan intactos para que quien
-     * llama pueda reenviarlos tal cual (por ejemplo, tras un pause_turn).
-     * Completa model y max_tokens con los de ClaudeConfig si el body no los
-     * trae. A diferencia de sendMessage, aplica un timeout de lectura: una
-     * búsqueda web puede tardar, pero no indefinidamente.
+     * etc.) con "stream": true y devuelve la respuesta reconstruida
+     * ({content, stop_reason, usage, container}), con los bloques que no son
+     * texto (server_tool_use, web_search_tool_result, citas, ...) intactos
+     * para poder reenviarlos tal cual tras un pause_turn. Completa model y
+     * max_tokens con los de ClaudeConfig si el body no los trae.
+     *
+     * Por qué streaming: una llamada con búsqueda web tarda minutos, y sin
+     * streaming la conexión pasa todo ese tiempo sin tráfico; en una red con
+     * inspección TLS se observó que la cortaban (Connection reset). Con
+     * streaming llegan eventos y pings mientras el modelo trabaja.
+     *
+     * @param idleTimeout tiempo máximo sin recibir NINGÚN evento (ni ping),
+     *                    y también para recibir los headers; no limita la
+     *                    duración total mientras sigan llegando eventos.
      */
-    public Map<String, Object> createMessage(Map<String, Object> body, Duration timeout) throws ClaudeApiException {
+    public Map<String, Object> createMessageStreaming(Map<String, Object> body, Duration idleTimeout) throws ClaudeApiException {
         Map<String, Object> fullBody = new LinkedHashMap<>();
         fullBody.put("model", config.model());
         fullBody.put("max_tokens", config.maxTokens());
         fullBody.putAll(body);
+        fullBody.put("stream", true);
 
+        AtomicLong lastActivity = new AtomicLong(System.nanoTime());
+        ExecutorService readerThread = Executors.newSingleThreadExecutor(r -> {
+            Thread thread = new Thread(r, "claude-stream-reader");
+            thread.setDaemon(true);
+            return thread;
+        });
         try {
+            // Sin HttpRequest.timeout a propósito: con ofInputStream ese timeout
+            // también corta la lectura del cuerpo, o sea, limitaría la duración
+            // TOTAL del stream. La espera de los headers se acota acá y la del
+            // cuerpo, por inactividad, más abajo.
             HttpRequest request = HttpRequest.newBuilder(URI.create(config.baseUrl() + "/v1/messages"))
-                    .timeout(timeout)
                     .header("x-api-key", config.apiKey())
                     .header("anthropic-version", "2023-06-01")
                     .header("Content-Type", "application/json")
+                    .header("Accept", "text/event-stream")
                     .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(fullBody)))
                     .build();
 
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() / 100 != 2) {
-                throw new ClaudeHttpException(response.statusCode(), response.body());
+            CompletableFuture<HttpResponse<InputStream>> pending = http.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream());
+            HttpResponse<InputStream> response;
+            try {
+                response = pending.get(idleTimeout.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (TimeoutException noHeaders) {
+                pending.cancel(true);
+                throw new ClaudeApiException("La API de Claude no respondió dentro de " + idleTimeout.toSeconds() + " s", noHeaders);
+            } catch (ExecutionException failed) {
+                if (failed.getCause() instanceof IOException ioError) {
+                    throw ioError;
+                }
+                throw new ClaudeApiException("Error llamando a la API de Claude", failed.getCause());
             }
-            return objectMapper.readValue(response.body(), MAP_TYPE);
+            if (response.statusCode() / 100 != 2) {
+                try (InputStream errorBody = response.body()) {
+                    throw new ClaudeHttpException(response.statusCode(), new String(errorBody.readAllBytes(), StandardCharsets.UTF_8));
+                }
+            }
+
+            // La lectura va en su propio hilo: este hilo vigila la inactividad y,
+            // si se pasa, interrumpe la lectura (un read bloqueado del body de
+            // HttpClient no se desbloquea de forma confiable cerrando el stream).
+            InputStream in = response.body();
+            Future<Map<String, Object>> reading = readerThread.submit(() -> readEvents(in, lastActivity));
+            long idleNanos = idleTimeout.toNanos();
+            long pollMillis = Math.max(50, Math.min(1000, idleTimeout.toMillis() / 4));
+            while (true) {
+                try {
+                    return reading.get(pollMillis, TimeUnit.MILLISECONDS);
+                } catch (TimeoutException stillReading) {
+                    if (System.nanoTime() - lastActivity.get() > idleNanos) {
+                        reading.cancel(true);
+                        closeQuietly(in);
+                        throw new ClaudeApiException("La API de Claude no envió eventos durante " + idleTimeout.toSeconds() + " s");
+                    }
+                } catch (ExecutionException failed) {
+                    Throwable cause = failed.getCause();
+                    if (cause instanceof ClaudeApiException apiError) {
+                        throw apiError;
+                    }
+                    if (cause instanceof IOException ioError) {
+                        throw new ClaudeApiException("Error de red leyendo el stream de la API de Claude", ioError);
+                    }
+                    throw new ClaudeApiException("Error leyendo el stream de la API de Claude", cause);
+                }
+            }
         } catch (java.net.http.HttpTimeoutException e) {
-            throw new ClaudeApiException("La API de Claude no respondió dentro de " + timeout.toSeconds() + " s", e);
+            throw new ClaudeApiException("La API de Claude no respondió dentro de " + idleTimeout.toSeconds() + " s", e);
         } catch (IOException e) {
             throw new ClaudeApiException("Error de red llamando a la API de Claude", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new ClaudeApiException("Llamada a la API de Claude interrumpida", e);
+        } finally {
+            readerThread.shutdownNow();
+        }
+    }
+
+    /** Lee el SSE línea por línea, registrando actividad, y devuelve la respuesta reconstruida. */
+    private Map<String, Object> readEvents(InputStream in, AtomicLong lastActivity) throws IOException {
+        ClaudeStreamAccumulator accumulator = new ClaudeStreamAccumulator(objectMapper);
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            String eventName = null;
+            StringBuilder data = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lastActivity.set(System.nanoTime());
+                if (line.isEmpty()) {
+                    if (!data.isEmpty()) {
+                        accumulator.accept(eventName, data.toString());
+                    }
+                    eventName = null;
+                    data.setLength(0);
+                } else if (line.startsWith(":")) {
+                    // comentario SSE
+                } else if (line.startsWith("event:")) {
+                    eventName = line.substring("event:".length()).strip();
+                } else if (line.startsWith("data:")) {
+                    if (!data.isEmpty()) {
+                        data.append('\n');
+                    }
+                    String value = line.substring("data:".length());
+                    data.append(value.startsWith(" ") ? value.substring(1) : value);
+                }
+            }
+            if (!data.isEmpty()) {
+                accumulator.accept(eventName, data.toString());
+            }
+        }
+        return accumulator.result();
+    }
+
+    private static void closeQuietly(InputStream in) {
+        try {
+            in.close();
+        } catch (IOException ignored) {
+            // ya cerrado
         }
     }
 

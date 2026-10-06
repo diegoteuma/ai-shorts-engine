@@ -49,7 +49,9 @@ app:
       fallback-tool-version: ${CLAUDE_WEB_SEARCH_FALLBACK_TOOL_VERSION:web_search_20250305}
       max-uses-draft: ${CLAUDE_WEB_SEARCH_MAX_USES:10}
       max-uses-proposals: ${CLAUDE_WEB_SEARCH_MAX_USES_PROPOSALS:3}
-    # Timeout de lectura de cada llamada a Claude (una búsqueda web tarda).
+    # Las llamadas van con streaming: este es el tiempo máximo SIN recibir
+    # ningún evento (ni ping) y el de espera de los headers. No limita la
+    # duración total mientras Claude siga mandando eventos.
     read-timeout-seconds: ${CLAUDE_READ_TIMEOUT_SECONDS:180}
     max-pause-continuations: 5
     words-per-second: 2.65

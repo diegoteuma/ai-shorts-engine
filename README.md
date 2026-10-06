@@ -180,6 +180,13 @@ POST /story-drafts/{id}/decision    PUERTA 0: {decision: APPROVE|REJECT, note?, 
   (sin modificar; si falta, el arranque falla) + un bloque de contexto
   (modo, fecha de hoy, búsqueda web, `existingStories` de `data/stories` y
   de los borradores no rechazados).
+- **Streaming**: las llamadas al generador usan `"stream": true` (SSE) sobre
+  HTTP/1.1. Una llamada con búsqueda web tarda minutos y, sin streaming, la
+  conexión queda sin tráfico; en una red con inspección TLS se observó que
+  la cortaban (`Connection reset`). Con streaming llegan eventos y pings
+  mientras Claude trabaja. Si estás detrás de inspección TLS, Java además
+  necesita confiar en la CA corporativa: arrancá con
+  `-Djavax.net.ssl.trustStoreType=Windows-ROOT`.
 - **Borrador**: una pasada con búsqueda web (maneja `pause_turn` reenviando
   los bloques intactos) → JSON del primer `{` al último `}` → normalización →
   validación. Si hay violaciones **duras**, UN reintento sin herramientas con
@@ -231,7 +238,7 @@ CLAUDE_WEB_SEARCH_MAX_USES                10     (tope de búsquedas por borrado
 CLAUDE_WEB_SEARCH_MAX_USES_PROPOSALS      3      (tope de búsquedas por pedido de propuestas)
 CLAUDE_WEB_SEARCH_TOOL_VERSION            web_search_20260318
 CLAUDE_WEB_SEARCH_FALLBACK_TOOL_VERSION   web_search_20250305 (se usa con allowed_callers [direct] si el modelo rechaza la anterior)
-CLAUDE_READ_TIMEOUT_SECONDS               180
+CLAUDE_READ_TIMEOUT_SECONDS               180    (máximo sin recibir eventos del stream; no limita la duración total)
 DRAFTS_DIR                                ./data/drafts (ignorado por git)
 ```
 
