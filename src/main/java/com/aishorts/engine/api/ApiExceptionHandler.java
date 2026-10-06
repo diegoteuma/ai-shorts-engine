@@ -1,6 +1,5 @@
 package com.aishorts.engine.api;
 
-import com.aishorts.engine.montage.MissingMontageInputsException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -22,15 +21,6 @@ class ApiExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<Map<String, Object>> handleUnreadableBody(HttpMessageNotReadableException e) {
         return ResponseEntity.badRequest().body(Map.of("error", "Body no es JSON válido: " + e.getMostSpecificCause().getMessage()));
-    }
-
-    /** Faltan clips/audios para el montaje: 400 con la lista exacta de archivos y rutas esperadas. */
-    @ExceptionHandler(MissingMontageInputsException.class)
-    ResponseEntity<Map<String, Object>> handleMissingMontageInputs(MissingMontageInputsException e) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("error", e.getMessage());
-        body.put("missing", e.missing());
-        return ResponseEntity.badRequest().body(body);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

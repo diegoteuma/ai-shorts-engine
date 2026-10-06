@@ -47,9 +47,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *    después se descarta. STANDARD y PREMIUM comparten el mismo modelo (ver
  *    KnownHiggsfieldPricing), así que esto aplica a los dos tiers por igual.
  *
- * Los tests de status usan un servidor HTTP local real (mismo patrón que
- * VideoMontageBuilderFfmpegTest) que devuelve las respuestas exactamente
- * como las documenta el spec.
+ * Los tests de status usan un servidor HTTP local real que devuelve las
+ * respuestas exactamente como las documenta el spec.
  */
 class HiggsfieldRestClientTest {
 

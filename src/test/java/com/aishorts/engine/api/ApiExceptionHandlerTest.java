@@ -32,7 +32,7 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
  *
  * POST /stories solo depende de ScriptDraftingService (ver
  * StoryDraftingService.draftStory), así que alcanza con reemplazar ese único
- * bean; los demás beans "reales" (Higgsfield, TTS, captions) quedan
+ * bean; los demás beans "reales" (Higgsfield, TTS) quedan
  * construidos con credenciales dummy pero nunca se invocan en este test.
  */
 @SpringBootTest(webEnvironment = RANDOM_PORT)
