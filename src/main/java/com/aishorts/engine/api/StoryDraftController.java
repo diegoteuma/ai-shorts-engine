@@ -3,6 +3,7 @@ package com.aishorts.engine.api;
 import com.aishorts.engine.approval.Decision;
 import com.aishorts.engine.domain.Story;
 import com.aishorts.engine.drafts.DraftDecision;
+import com.aishorts.engine.drafts.DraftEdit;
 import com.aishorts.engine.drafts.DraftStatus;
 import com.aishorts.engine.drafts.DraftText;
 import com.aishorts.engine.drafts.ExistingStory;
@@ -40,6 +41,7 @@ import java.util.Set;
  * POST   /story-drafts                  generar un borrador (queda PENDING_REVIEW)
  * GET    /story-drafts                  resumen de todos los borradores
  * GET    /story-drafts/{id}             borrador completo
+ * PATCH  /story-drafts/{id}             editar título / narración / prompts (sigue PENDING_REVIEW)
  * POST   /story-drafts/{id}/decision    APPROVE | REJECT          (PUERTA 0)
  * </pre>
  */
@@ -104,6 +106,20 @@ public class StoryDraftController {
     @GetMapping("/{id}")
     public StoryDraft getDraft(@PathVariable("id") String id) {
         return loadDraftOrNotFound(id);
+    }
+
+    @PatchMapping("/{id}")
+    public StoryDraft editDraft(@PathVariable("id") String id, @RequestBody(required = false) Map<String, Object> body) {
+        StoryDraft draft = loadDraftOrNotFound(id);
+        Map<String, Object> fields = body != null ? body : Map.of();
+        DraftEdit edit = new DraftEdit(
+                optionalString(fields, "title"),
+                parseEdits(fields, "narrationEdits", "narrationText"),
+                parseEdits(fields, "promptEdits", "visualPrompt")
+        );
+        StoryDraft edited = draftService.edit(draft, edit, existingStories());
+        draftRepository.update(edited);
+        return edited;
     }
 
     @PostMapping("/{id}/decision")

@@ -95,12 +95,13 @@ public final class StoryApprovalService {
             Scene scene = findScene(story, decision.sceneId());
             try {
                 if (decision.decision() == Decision.APPROVE) {
+                    // Primero el prompt: si la revisión se rechaza, la narración queda intacta.
+                    scene.approvePrompt(decision.revisedVisualPrompt(), decision.tierOverride());
                     if (decision.revisedNarrationText() != null && !decision.revisedNarrationText().isBlank()) {
                         scene.updateNarration(
                                 decision.revisedNarrationText(),
                                 durationEstimator.estimate(decision.revisedNarrationText()));
                     }
-                    scene.approvePrompt(decision.revisedVisualPrompt(), decision.tierOverride());
                     succeeded.add(scene.id());
                 } else {
                     scene.rejectPrompt(decision.note());

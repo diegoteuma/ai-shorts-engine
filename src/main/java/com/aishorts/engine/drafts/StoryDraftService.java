@@ -270,6 +270,42 @@ public final class StoryDraftService {
         }
     }
 
+    // --- PATCH /story-drafts/{id} ------------------------------------------------------------
+
+    /**
+     * Aplica tus ediciones a un borrador PENDING_REVIEW sin llamar a Claude:
+     * recalcula (palabras, segundos, checks) y revalida. A diferencia de
+     * APPROVE, las violaciones HARD NO bloquean: quedan visibles en el
+     * borrador para que sigas editando; recién la aprobación las exige en
+     * cero. Ni guarda ni lee nada: el controller guarda el borrador.
+     */
+    public StoryDraft edit(StoryDraft draft, DraftEdit edit, List<ExistingStory> existingStories) {
+        if (draft.status != DraftStatus.PENDING_REVIEW) {
+            throw new DraftException(409, "El borrador '" + draft.id + "' ya fue decidido (" + draft.status
+                    + "); solo se edita un borrador PENDING_REVIEW.");
+        }
+        if (edit.isEmpty()) {
+            throw new DraftException(400, "No hay nada que editar: manda 'title', 'narrationEdits' y/o 'promptEdits'.");
+        }
+        if (edit.title() != null && edit.title().isBlank()) {
+            throw new DraftException(400, "'title' no puede quedar vacío.");
+        }
+        Map<String, DraftScene> scenesById = scenesById(draft);
+        checkEdits(edit.narrationEdits(), scenesById, "narrationEdits");
+        checkEdits(edit.promptEdits(), scenesById, "promptEdits");
+
+        if (edit.title() != null) {
+            draft.title = edit.title().strip();
+        }
+        applyEdits(scenesById, edit.narrationEdits(), edit.promptEdits());
+        normalizer.recalculate(draft, draft.researchedUrls, accessedDate(draft));
+        // Igual que al aprobar: el propio id del borrador no cuenta como ocupado.
+        setViolations(draft, validator.validate(draft,
+                new DraftValidator.Context(Set.of(), existingStories, draft.researchedUrls)));
+        draft.editedAt = OffsetDateTime.now(clock).toString();
+        return draft;
+    }
+
     // --- POST /story-drafts/{id}/decision (PUERTA 0) -----------------------------------------
 
     /**
@@ -284,12 +320,7 @@ public final class StoryDraftService {
         if (draft.status != DraftStatus.PENDING_REVIEW) {
             throw new DraftException(409, "El borrador '" + draft.id + "' ya fue decidido (" + draft.status + ").");
         }
-        Map<String, DraftScene> scenesById = new HashMap<>();
-        for (DraftScene scene : DraftRules.scenes(draft)) {
-            if (scene != null && scene.id != null) {
-                scenesById.putIfAbsent(scene.id, scene);
-            }
-        }
+        Map<String, DraftScene> scenesById = scenesById(draft);
         checkEdits(decision.narrationEdits(), scenesById, "narrationEdits");
         checkEdits(decision.promptEdits(), scenesById, "promptEdits");
 
@@ -303,12 +334,7 @@ public final class StoryDraftService {
             return new DecisionOutcome(draft, null);
         }
 
-        for (DraftDecision.SceneTextEdit edit : decision.narrationEdits()) {
-            scenesById.get(edit.sceneId()).narrationText = edit.text();
-        }
-        for (DraftDecision.SceneTextEdit edit : decision.promptEdits()) {
-            scenesById.get(edit.sceneId()).visualPrompt = edit.text();
-        }
+        applyEdits(scenesById, decision.narrationEdits(), decision.promptEdits());
         normalizer.recalculate(draft, draft.researchedUrls, accessedDate(draft));
         // Al aprobar, el propio id del borrador no cuenta como ocupado; una Story existente se rechaza abajo con 409.
         List<Violation> violations = validator.validate(draft,
@@ -332,6 +358,27 @@ public final class StoryDraftService {
         draft.decidedAt = OffsetDateTime.now(clock).toString();
         setViolations(draft, violations);
         return new DecisionOutcome(draft, story);
+    }
+
+    private static Map<String, DraftScene> scenesById(StoryDraft draft) {
+        Map<String, DraftScene> scenesById = new HashMap<>();
+        for (DraftScene scene : DraftRules.scenes(draft)) {
+            if (scene != null && scene.id != null) {
+                scenesById.putIfAbsent(scene.id, scene);
+            }
+        }
+        return scenesById;
+    }
+
+    private static void applyEdits(Map<String, DraftScene> scenesById,
+                                   List<DraftDecision.SceneTextEdit> narrationEdits,
+                                   List<DraftDecision.SceneTextEdit> promptEdits) {
+        for (DraftDecision.SceneTextEdit edit : narrationEdits) {
+            scenesById.get(edit.sceneId()).narrationText = edit.text();
+        }
+        for (DraftDecision.SceneTextEdit edit : promptEdits) {
+            scenesById.get(edit.sceneId()).visualPrompt = edit.text();
+        }
     }
 
     private static void checkEdits(List<DraftDecision.SceneTextEdit> edits, Map<String, DraftScene> scenesById, String field) {

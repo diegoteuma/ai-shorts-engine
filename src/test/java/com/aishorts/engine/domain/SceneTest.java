@@ -149,6 +149,80 @@ class SceneTest {
         assertThatIllegalStateException().isThrownBy(scene::approveCost);
     }
 
+    // --- revisión de un prompt ya aprobado ------------------------------------------------
+
+    @Test
+    void approvePrompt_onAlreadyApprovedScene_appliesTheRevisedPrompt_andDiscardsTheStaleCost() {
+        Scene scene = newScene();
+        scene.proposeTier(new TierRecommendation(GenerationTier.STANDARD, 40, "test"));
+        scene.approvePrompt();
+        scene.recordCostEstimate(estimate("0.35"), "higgsfield-ai/soul/standard");
+        scene.approveCost();
+
+        scene.approvePrompt("prompt visual revisado", null);
+
+        assertThat(scene.visualPrompt()).isEqualTo("prompt visual revisado");
+        assertThat(scene.isPromptApproved()).isTrue();
+        assertThat(scene.costStatus()).isEqualTo(SceneCostStatus.NOT_ESTIMATED);
+        assertThat(scene.costEstimate()).isNull();
+        assertThat(scene.chosenModelId()).isNull();
+        assertThat(scene.needsCostEstimate()).isTrue();
+    }
+
+    @Test
+    void approvePrompt_onAlreadyApprovedScene_withTierOverride_changesTheTier() {
+        Scene scene = newScene();
+        scene.proposeTier(new TierRecommendation(GenerationTier.STANDARD, 40, "test"));
+        scene.approvePrompt();
+
+        scene.approvePrompt(null, GenerationTier.PREMIUM);
+
+        assertThat(scene.chosenTier()).isEqualTo(GenerationTier.PREMIUM);
+    }
+
+    @Test
+    void approvePrompt_onAlreadyApprovedScene_withoutChanges_keepsTheCost() {
+        Scene scene = newScene();
+        scene.proposeTier(new TierRecommendation(GenerationTier.STANDARD, 40, "test"));
+        scene.approvePrompt();
+        scene.recordCostEstimate(estimate("0.35"), "higgsfield-ai/soul/standard");
+        scene.approveCost();
+
+        scene.approvePrompt();
+        scene.approvePrompt("prompt visual", GenerationTier.STANDARD);
+
+        assertThat(scene.isCostApproved()).isTrue();
+        assertThat(scene.costEstimate()).isNotNull();
+    }
+
+    @Test
+    void approvePrompt_revisionAfterGenerationStarted_isRejected_untilResetGeneration() {
+        Scene scene = completedScene();
+
+        assertThatIllegalStateException().isThrownBy(() -> scene.approvePrompt("otro prompt", null));
+        assertThat(scene.visualPrompt()).isEqualTo("prompt visual");
+        assertThat(scene.generationStatus()).isEqualTo(GenerationStatus.COMPLETED);
+
+        scene.resetForRegeneration();
+        scene.approvePrompt("otro prompt", null);
+        assertThat(scene.visualPrompt()).isEqualTo("otro prompt");
+    }
+
+    @Test
+    void updateNarration_withNewText_discardsTheStaleAudio() {
+        Scene scene = newScene();
+        scene.proposeTier(new TierRecommendation(GenerationTier.STANDARD, 40, "test"));
+        scene.approvePrompt();
+        scene.attachNarrationAudio("audio/scene-1.mp3", Duration.ofSeconds(7));
+
+        scene.updateNarration("narración de prueba", Duration.ofSeconds(5));
+        assertThat(scene.hasNarrationAudio()).isTrue();
+
+        scene.updateNarration("otra narración", Duration.ofSeconds(4));
+        assertThat(scene.hasNarrationAudio()).isFalse();
+        assertThat(scene.narrationText()).isEqualTo("otra narración");
+    }
+
     // --- resetForRegeneration ------------------------------------------------------------
 
     private static Scene completedScene() {

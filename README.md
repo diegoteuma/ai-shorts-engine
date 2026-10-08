@@ -171,6 +171,7 @@ POST /story-drafts/proposals        {focus?}  -> 5 temas candidatos (no guarda n
 POST /story-drafts                  {topic, rejectedDraftId?}  -> borrador PENDING_REVIEW en data/drafts/<id>.json
 GET  /story-drafts                  resumen (id, título, tema, status, # violaciones duras/blandas)
 GET  /story-drafts/{id}             borrador completo (claims, fuentes, what-if, violaciones, researchedUrls, usage)
+PATCH /story-drafts/{id}            {title?, narrationEdits?, promptEdits?} -> edita a mano un PENDING_REVIEW, recalcula y revalida (sin Claude)
 POST /story-drafts/{id}/decision    PUERTA 0: {decision: APPROVE|REJECT, note?, narrationEdits?, promptEdits?, acknowledgeUnverified?}
          │
          └─ APPROVE -> Story nueva en data/stories (= POST /stories) -> POST /stories/{id}/tiers -> ...

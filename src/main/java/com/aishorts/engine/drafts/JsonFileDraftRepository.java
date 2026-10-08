@@ -124,6 +124,7 @@ public final class JsonFileDraftRepository {
                 summary.put("hardViolations", hard);
                 summary.put("softViolations", soft);
                 summary.put("createdAt", draft.createdAt);
+                summary.put("editedAt", draft.editedAt);
                 summary.put("approvedStoryId", draft.approvedStoryId);
             } catch (RuntimeException e) {
                 summary.put("error", "No se pudo leer el borrador: " + e.getMessage());
