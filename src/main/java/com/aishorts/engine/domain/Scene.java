@@ -60,9 +60,16 @@ public final class Scene {
      * quien llama (normalmente vía NarrationDurationEstimator) — Scene no
      * conoce el algoritmo de estimación, igual que no conoce el de scoring
      * de dificultad.
+     *
+     * Si el texto cambia, el audio ya sintetizado (si lo había) deja de
+     * corresponderle: se descarta para que /narration lo vuelva a sintetizar.
      */
     public void updateNarration(String narrationText, Duration targetDuration) {
-        this.narrationText = Objects.requireNonNull(narrationText, "narrationText");
+        Objects.requireNonNull(narrationText, "narrationText");
+        if (!narrationText.equals(this.narrationText)) {
+            this.narrationAudioPath = null;
+        }
+        this.narrationText = narrationText;
         this.targetDuration = Objects.requireNonNull(targetDuration, "targetDuration");
     }
 
@@ -81,10 +88,30 @@ public final class Scene {
      * Aprueba el prompt de la escena, opcionalmente con un texto revisado y/o
      * una anulación manual del tier sugerido (por si vos decidís que una
      * escena "de transición" igual merece premium, o al revés).
+     *
+     * Sobre una escena ya aprobada: sin cambios es un no-op (idempotente);
+     * con un prompt o tier distinto se aplica la revisión y se descarta el
+     * costo estimado/aprobado, porque era del prompt/tier anterior (hay que
+     * volver a pasar por cost-estimates y la PUERTA 2). Si la generación ya
+     * arrancó se rechaza: primero reset-generation.
      */
     public void approvePrompt(String revisedVisualPrompt, GenerationTier tierOverride) {
         if (promptStatus == SceneApprovalStatus.APPROVED) {
-            return;
+            boolean promptChanges = revisedVisualPrompt != null && !revisedVisualPrompt.isBlank()
+                    && !revisedVisualPrompt.equals(visualPrompt);
+            boolean tierChanges = tierOverride != null && tierOverride != chosenTier;
+            if (!promptChanges && !tierChanges) {
+                return;
+            }
+            if (generationStatus != GenerationStatus.NOT_STARTED) {
+                throw new IllegalStateException(
+                        "La escena '" + id + "' ya tiene generación (estado: " + generationStatus
+                                + "); para revisar su prompt o tier primero usá reset-generation.");
+            }
+            this.costStatus = SceneCostStatus.NOT_ESTIMATED;
+            this.costEstimate = null;
+            this.costRejectionNote = null;
+            this.chosenModelId = null;
         }
         if (revisedVisualPrompt != null && !revisedVisualPrompt.isBlank()) {
             this.visualPrompt = revisedVisualPrompt;
