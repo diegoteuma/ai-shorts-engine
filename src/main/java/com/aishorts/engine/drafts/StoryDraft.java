@@ -29,6 +29,8 @@ public final class StoryDraft {
     public String rejectedDraftId;
     public String reviewerFeedback;
     public String createdAt;
+    /** Última edición manual (PATCH /story-drafts/{id}); null si nunca se editó. */
+    public String editedAt;
 
     public List<DraftScene> scenes = new ArrayList<>();
     public List<Claim> claims = new ArrayList<>();
