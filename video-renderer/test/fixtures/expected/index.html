@@ -1,0 +1,1216 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=720, height=1280" />
+    <title>Tunguska — prueba vertical</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Montserrat";
+        font-style: normal;
+        font-weight: 800;
+        src: url("fonts/Montserrat-800.woff2") format("woff2");
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 720px; height: 1280px; overflow: hidden; background: #000; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; }
+
+      #cap-container { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+      .hl-group {
+        position: absolute;
+        bottom: 14%;
+        left: 0;
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 8px;
+        padding: 0 8%;
+        opacity: 0;
+        visibility: hidden;
+      }
+      .hl-word {
+        font-family: "Montserrat", sans-serif;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: #ffffff;
+        display: inline-block;
+        letter-spacing: 0.01em;
+        line-height: 1;
+        position: relative;
+        isolation: isolate;
+        padding: 4px 10px 6px;
+        text-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+        transform-origin: 50% 58%;
+        will-change: transform, filter;
+      }
+      .hl-word-bg {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, #ff1745 0%, #df1238 100%);
+        border-radius: 8px;
+        box-shadow: 0 10px 24px rgba(229, 20, 58, 0.32);
+        opacity: 0;
+        transform: scaleX(0);
+        transform-origin: 0% 50%;
+      }
+      .hl-word-text { position: relative; }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-width="720"
+      data-height="1280"
+      data-duration="37.430566"
+    >
+      <video
+        id="v-tunguska-gancho"
+        class="clip"
+        src="assets/clips/tunguska-gancho.mp4"
+        data-start="0.000000"
+        data-duration="4.458231"
+        data-media-start="0"
+        data-track-index="0"
+        muted
+        playsinline
+        style="position:absolute; left:0; top:0; width:720px; height:1280px; object-fit:cover; z-index:1"
+      ></video>
+      <video
+        id="v-tunguska-explicacion"
+        class="clip"
+        src="assets/clips/tunguska-explicacion.mp4"
+        data-start="4.458231"
+        data-duration="6.919546"
+        data-media-start="0"
+        data-track-index="0"
+        muted
+        playsinline
+        style="position:absolute; left:0; top:0; width:720px; height:1280px; object-fit:cover; z-index:2"
+      ></video>
+      <video
+        id="v-tunguska-contexto"
+        class="clip"
+        src="assets/clips/tunguska-contexto.mp4"
+        data-start="11.377777"
+        data-duration="7.987664"
+        data-media-start="0"
+        data-track-index="0"
+        muted
+        playsinline
+        style="position:absolute; left:0; top:0; width:720px; height:1280px; object-fit:cover; z-index:3"
+      ></video>
+      <video
+        id="v-tunguska-giro"
+        class="clip"
+        src="assets/clips/tunguska-giro.mp4"
+        data-start="19.365441"
+        data-duration="6.222948"
+        data-media-start="0"
+        data-track-index="0"
+        muted
+        playsinline
+        style="position:absolute; left:0; top:0; width:720px; height:1280px; object-fit:cover; z-index:4"
+      ></video>
+      <video
+        id="v-tunguska-consecuencia"
+        class="clip"
+        src="assets/clips/tunguska-consecuencia.mp4"
+        data-start="25.588389"
+        data-duration="7.709025"
+        data-media-start="0"
+        data-track-index="0"
+        muted
+        playsinline
+        style="position:absolute; left:0; top:0; width:720px; height:1280px; object-fit:cover; z-index:5"
+      ></video>
+      <video
+        id="v-tunguska-cierre"
+        class="clip"
+        src="assets/clips/tunguska-cierre.mp4"
+        data-start="33.297414"
+        data-duration="4.133152"
+        data-media-start="0"
+        data-track-index="0"
+        muted
+        playsinline
+        style="position:absolute; left:0; top:0; width:720px; height:1280px; object-fit:cover; z-index:6"
+      ></video>
+      <audio
+        id="a-tunguska-gancho"
+        src="assets/audio/tunguska-gancho.mp3"
+        data-start="0.000000"
+        data-duration="4.458231"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+      <audio
+        id="a-tunguska-explicacion"
+        src="assets/audio/tunguska-explicacion.mp3"
+        data-start="4.458231"
+        data-duration="6.919546"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+      <audio
+        id="a-tunguska-contexto"
+        src="assets/audio/tunguska-contexto.mp3"
+        data-start="11.377777"
+        data-duration="7.987664"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+      <audio
+        id="a-tunguska-giro"
+        src="assets/audio/tunguska-giro.mp3"
+        data-start="19.365441"
+        data-duration="6.222948"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+      <audio
+        id="a-tunguska-consecuencia"
+        src="assets/audio/tunguska-consecuencia.mp3"
+        data-start="25.588389"
+        data-duration="7.709025"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+      <audio
+        id="a-tunguska-cierre"
+        src="assets/audio/tunguska-cierre.mp3"
+        data-start="33.297414"
+        data-duration="4.133152"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+      <div id="cap-container">
+      <div class="hl-group" id="hl-grp-0"></div>
+      <div class="hl-group" id="hl-grp-1"></div>
+      <div class="hl-group" id="hl-grp-2"></div>
+      <div class="hl-group" id="hl-grp-3"></div>
+      <div class="hl-group" id="hl-grp-4"></div>
+      <div class="hl-group" id="hl-grp-5"></div>
+      <div class="hl-group" id="hl-grp-6"></div>
+      <div class="hl-group" id="hl-grp-7"></div>
+      <div class="hl-group" id="hl-grp-8"></div>
+      <div class="hl-group" id="hl-grp-9"></div>
+      <div class="hl-group" id="hl-grp-10"></div>
+      <div class="hl-group" id="hl-grp-11"></div>
+      <div class="hl-group" id="hl-grp-12"></div>
+      <div class="hl-group" id="hl-grp-13"></div>
+      <div class="hl-group" id="hl-grp-14"></div>
+      <div class="hl-group" id="hl-grp-15"></div>
+      <div class="hl-group" id="hl-grp-16"></div>
+      <div class="hl-group" id="hl-grp-17"></div>
+      <div class="hl-group" id="hl-grp-18"></div>
+      <div class="hl-group" id="hl-grp-19"></div>
+      <div class="hl-group" id="hl-grp-20"></div>
+      <div class="hl-group" id="hl-grp-21"></div>
+      <div class="hl-group" id="hl-grp-22"></div>
+      <div class="hl-group" id="hl-grp-23"></div>
+      <div class="hl-group" id="hl-grp-24"></div>
+      <div class="hl-group" id="hl-grp-25"></div>
+      <div class="hl-group" id="hl-grp-26"></div>
+      </div>
+    </div>
+    <script>
+      var CANVAS_W = 720;
+      var CAPTION_BASE_FONT = Math.round(CANVAS_W * 0.11);
+      var CAPTION_MAX_WIDTH = Math.round(CANVAS_W * 0.84);
+
+      var _fitCanvas = document.createElement("canvas");
+      var _fitCtx = _fitCanvas.getContext("2d");
+      function fitFontSize(text, baseFontSize, fontWeight, fontFamily, maxWidth) {
+        var size = baseFontSize;
+        var minSize = Math.floor(baseFontSize * 0.45);
+        while (size > minSize) {
+          _fitCtx.font = fontWeight + " " + size + "px " + fontFamily;
+          if (_fitCtx.measureText(text).width <= maxWidth) return size;
+          size -= 2;
+        }
+        return minSize;
+      }
+
+      const tl = gsap.timeline({ paused: true });
+
+  // Group 0: "Una explosión en el" [0.000, 0.850] scene=tunguska-gancho
+  (function(){
+    var grp = document.getElementById("hl-grp-0");
+    var groupWords = [{"text":"Una","start":0,"end":0.24},{"text":"explosión","start":0.24,"end":0.64},{"text":"en","start":0.64,"end":0.72},{"text":"el","start":0.72,"end":0.8}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-0-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-0-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 0.000000);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 0.000000);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-0-bg" + i);
+      var wordEl = document.getElementById("hl-grp-0-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 0.750000);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 0.850000);
+  })();
+
+  // Group 1: "cielo derribó" [0.800, 1.630] scene=tunguska-gancho
+  (function(){
+    var grp = document.getElementById("hl-grp-1");
+    var groupWords = [{"text":"cielo","start":0.8,"end":1.12},{"text":"derribó","start":1.12,"end":1.52}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-1-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-1-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 0.800000);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 0.800000);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-1-bg" + i);
+      var wordEl = document.getElementById("hl-grp-1-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 1.530000);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 1.630000);
+  })();
+
+  // Group 2: "80 millones de árboles" [1.680, 3.010] scene=tunguska-gancho
+  (function(){
+    var grp = document.getElementById("hl-grp-2");
+    var groupWords = [{"text":"80","start":1.68,"end":2.08},{"text":"millones","start":2.08,"end":2.4},{"text":"de","start":2.4,"end":2.48},{"text":"árboles","start":2.48,"end":2.96}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-2-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-2-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 1.680000);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 1.680000);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-2-bg" + i);
+      var wordEl = document.getElementById("hl-grp-2-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 2.910000);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 3.010000);
+  })();
+
+  // Group 3: "en cuestión de segundos." [2.960, 4.408] scene=tunguska-gancho
+  (function(){
+    var grp = document.getElementById("hl-grp-3");
+    var groupWords = [{"text":"en","start":2.96,"end":3.12},{"text":"cuestión","start":3.12,"end":3.44},{"text":"de","start":3.44,"end":3.6},{"text":"segundos.","start":3.6,"end":4.32}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-3-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-3-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 2.960000);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 2.960000);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-3-bg" + i);
+      var wordEl = document.getElementById("hl-grp-3-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 4.308231);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 4.408231);
+  })();
+
+  // Group 4: "Un objeto espacial entró" [4.458, 5.788] scene=tunguska-explicacion
+  (function(){
+    var grp = document.getElementById("hl-grp-4");
+    var groupWords = [{"text":"Un","start":4.458231,"end":4.698231},{"text":"objeto","start":4.698231,"end":4.938231},{"text":"espacial","start":4.938231,"end":5.418231},{"text":"entró","start":5.418231,"end":5.738231}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-4-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-4-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 4.458231);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 4.458231);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-4-bg" + i);
+      var wordEl = document.getElementById("hl-grp-4-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 5.688231);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 5.788231);
+  })();
+
+  // Group 5: "a la atmósfera y" [5.738, 6.588] scene=tunguska-explicacion
+  (function(){
+    var grp = document.getElementById("hl-grp-5");
+    var groupWords = [{"text":"a","start":5.738231,"end":5.818231},{"text":"la","start":5.818231,"end":5.898231},{"text":"atmósfera","start":5.898231,"end":6.458231},{"text":"y","start":6.458231,"end":6.538231}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-5-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-5-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 5.738231);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 5.738231);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-5-bg" + i);
+      var wordEl = document.getElementById("hl-grp-5-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 6.488231);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 6.588231);
+  })();
+
+  // Group 6: "explotó antes de tocar" [6.538, 7.948] scene=tunguska-explicacion
+  (function(){
+    var grp = document.getElementById("hl-grp-6");
+    var groupWords = [{"text":"explotó","start":6.538231,"end":7.178231},{"text":"antes","start":7.178231,"end":7.338231},{"text":"de","start":7.338231,"end":7.498231},{"text":"tocar","start":7.498231,"end":7.898231}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-6-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-6-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 6.538231);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 6.538231);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-6-bg" + i);
+      var wordEl = document.getElementById("hl-grp-6-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 7.848231);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 7.948231);
+  })();
+
+  // Group 7: "el suelo, liberando una" [7.898, 9.388] scene=tunguska-explicacion
+  (function(){
+    var grp = document.getElementById("hl-grp-7");
+    var groupWords = [{"text":"el","start":7.898231,"end":8.058231},{"text":"suelo,","start":8.058231,"end":8.618231},{"text":"liberando","start":8.618231,"end":9.178231},{"text":"una","start":9.178231,"end":9.338231}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-7-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-7-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 7.898231);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 7.898231);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-7-bg" + i);
+      var wordEl = document.getElementById("hl-grp-7-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 9.288231);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 9.388231);
+  })();
+
+  // Group 8: "onda de choque devastadora." [9.338, 11.328] scene=tunguska-explicacion
+  (function(){
+    var grp = document.getElementById("hl-grp-8");
+    var groupWords = [{"text":"onda","start":9.338231,"end":9.658231},{"text":"de","start":9.658231,"end":9.818231},{"text":"choque","start":9.818231,"end":10.218231},{"text":"devastadora.","start":10.218231,"end":11.258231}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-8-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-8-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 9.338231);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 9.338231);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-8-bg" + i);
+      var wordEl = document.getElementById("hl-grp-8-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 11.227777);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 11.327777);
+  })();
+
+  // Group 9: "Esto ocurrió el 30" [11.378, 12.628] scene=tunguska-contexto
+  (function(){
+    var grp = document.getElementById("hl-grp-9");
+    var groupWords = [{"text":"Esto","start":11.377777,"end":11.617777},{"text":"ocurrió","start":11.617777,"end":12.017777},{"text":"el","start":12.017777,"end":12.177777},{"text":"30","start":12.177777,"end":12.577777}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-9-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-9-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 11.377777);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 11.377777);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-9-bg" + i);
+      var wordEl = document.getElementById("hl-grp-9-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 12.527777);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 12.627777);
+  })();
+
+  // Group 10: "de junio de 1908," [12.578, 14.608] scene=tunguska-contexto
+  (function(){
+    var grp = document.getElementById("hl-grp-10");
+    var groupWords = [{"text":"de","start":12.577777,"end":12.737777},{"text":"junio","start":12.737777,"end":13.377777},{"text":"de","start":13.377777,"end":13.537777},{"text":"1908,","start":13.537777,"end":14.497777}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-10-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-10-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 12.577777);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 12.577777);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-10-bg" + i);
+      var wordEl = document.getElementById("hl-grp-10-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 14.507777);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 14.607777);
+  })();
+
+  // Group 11: "en Siberia, Rusia: el" [14.658, 16.548] scene=tunguska-contexto
+  (function(){
+    var grp = document.getElementById("hl-grp-11");
+    var groupWords = [{"text":"en","start":14.657777,"end":14.897777},{"text":"Siberia,","start":14.897777,"end":15.617777},{"text":"Rusia:","start":15.617777,"end":16.337777},{"text":"el","start":16.337777,"end":16.497777}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-11-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-11-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 14.657777);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 14.657777);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-11-bg" + i);
+      var wordEl = document.getElementById("hl-grp-11-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 16.447777);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 16.547777);
+  })();
+
+  // Group 12: "evento se conoce como" [16.498, 17.588] scene=tunguska-contexto
+  (function(){
+    var grp = document.getElementById("hl-grp-12");
+    var groupWords = [{"text":"evento","start":16.497777,"end":16.817777},{"text":"se","start":16.817777,"end":16.977777},{"text":"conoce","start":16.977777,"end":17.377777},{"text":"como","start":17.377777,"end":17.537777}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-12-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-12-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 16.497777);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 16.497777);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-12-bg" + i);
+      var wordEl = document.getElementById("hl-grp-12-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 17.487777);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 17.587777);
+  })();
+
+  // Group 13: "la explosión de Tunguska." [17.538, 19.348] scene=tunguska-contexto
+  (function(){
+    var grp = document.getElementById("hl-grp-13");
+    var groupWords = [{"text":"la","start":17.537777,"end":17.697777},{"text":"explosión","start":17.697777,"end":18.177777},{"text":"de","start":18.177777,"end":18.337777},{"text":"Tunguska.","start":18.337777,"end":19.297777}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-13-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-13-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 17.537777);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 17.537777);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-13-bg" + i);
+      var wordEl = document.getElementById("hl-grp-13-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 19.247777);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 19.347777);
+  })();
+
+  // Group 14: "Ahora, imaginemos" [19.365, 20.595] scene=tunguska-giro
+  (function(){
+    var grp = document.getElementById("hl-grp-14");
+    var groupWords = [{"text":"Ahora,","start":19.365441,"end":19.925441},{"text":"imaginemos","start":19.925441,"end":20.485441}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-14-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-14-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 19.365441);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 19.365441);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-14-bg" + i);
+      var wordEl = document.getElementById("hl-grp-14-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 20.495441);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 20.595441);
+  })();
+
+  // Group 15: "algo distinto: ¿qué habría" [20.645, 22.295] scene=tunguska-giro
+  (function(){
+    var grp = document.getElementById("hl-grp-15");
+    var groupWords = [{"text":"algo","start":20.645441,"end":20.885441},{"text":"distinto:","start":20.885441,"end":21.525441},{"text":"¿qué","start":21.525441,"end":21.925441},{"text":"habría","start":21.925441,"end":22.245441}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-15-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-15-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 20.645441);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 20.645441);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-15-bg" + i);
+      var wordEl = document.getElementById("hl-grp-15-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 22.195441);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 22.295441);
+  })();
+
+  // Group 16: "pasado si esa explosión" [22.245, 23.495] scene=tunguska-giro
+  (function(){
+    var grp = document.getElementById("hl-grp-16");
+    var groupWords = [{"text":"pasado","start":22.245441,"end":22.645441},{"text":"si","start":22.645441,"end":22.805441},{"text":"esa","start":22.805441,"end":22.965441},{"text":"explosión","start":22.965441,"end":23.445441}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-16-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-16-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 22.245441);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 22.245441);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-16-bg" + i);
+      var wordEl = document.getElementById("hl-grp-16-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 23.395441);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 23.495441);
+  })();
+
+  // Group 17: "hubiera ocurrido sobre una" [23.445, 24.695] scene=tunguska-giro
+  (function(){
+    var grp = document.getElementById("hl-grp-17");
+    var groupWords = [{"text":"hubiera","start":23.445441,"end":23.765441},{"text":"ocurrido","start":23.765441,"end":24.245441},{"text":"sobre","start":24.245441,"end":24.485441},{"text":"una","start":24.485441,"end":24.645441}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-17-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-17-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 23.445441);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 23.445441);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-17-bg" + i);
+      var wordEl = document.getElementById("hl-grp-17-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 24.595441);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 24.695441);
+  })();
+
+  // Group 18: "gran ciudad?" [24.645, 25.538] scene=tunguska-giro
+  (function(){
+    var grp = document.getElementById("hl-grp-18");
+    var groupWords = [{"text":"gran","start":24.645441,"end":24.885441},{"text":"ciudad?","start":24.885441,"end":25.445441}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-18-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-18-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 24.645441);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 24.645441);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-18-bg" + i);
+      var wordEl = document.getElementById("hl-grp-18-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 25.438389);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 25.538389);
+  })();
+
+  // Group 19: "La onda expansiva habría" [25.588, 27.318] scene=tunguska-consecuencia
+  (function(){
+    var grp = document.getElementById("hl-grp-19");
+    var groupWords = [{"text":"La","start":25.588389,"end":25.748389},{"text":"onda","start":25.748389,"end":26.148389},{"text":"expansiva","start":26.148389,"end":26.788389},{"text":"habría","start":26.788389,"end":27.268389}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-19-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-19-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 25.588389);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 25.588389);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-19-bg" + i);
+      var wordEl = document.getElementById("hl-grp-19-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 27.218389);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 27.318389);
+  })();
+
+  // Group 20: "arrasado edificios y infraestructuras" [27.268, 29.318] scene=tunguska-consecuencia
+  (function(){
+    var grp = document.getElementById("hl-grp-20");
+    var groupWords = [{"text":"arrasado","start":27.268389,"end":27.828389},{"text":"edificios","start":27.828389,"end":28.308389},{"text":"y","start":28.308389,"end":28.388389},{"text":"infraestructuras","start":28.468389,"end":29.268389}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-20-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-20-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 27.268389);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 27.268389);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-20-bg" + i);
+      var wordEl = document.getElementById("hl-grp-20-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 29.218389);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 29.318389);
+  })();
+
+  // Group 21: "en un radio de" [29.268, 30.118] scene=tunguska-consecuencia
+  (function(){
+    var grp = document.getElementById("hl-grp-21");
+    var groupWords = [{"text":"en","start":29.268389,"end":29.428389},{"text":"un","start":29.428389,"end":29.588389},{"text":"radio","start":29.588389,"end":29.908389},{"text":"de","start":29.908389,"end":30.068389}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-21-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-21-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 29.268389);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 29.268389);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-21-bg" + i);
+      var wordEl = document.getElementById("hl-grp-21-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 30.018389);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 30.118389);
+  })();
+
+  // Group 22: "varios kilómetros, sin dejar" [30.068, 31.958] scene=tunguska-consecuencia
+  (function(){
+    var grp = document.getElementById("hl-grp-22");
+    var groupWords = [{"text":"varios","start":30.068389,"end":30.388389},{"text":"kilómetros,","start":30.388389,"end":31.348389},{"text":"sin","start":31.348389,"end":31.588389},{"text":"dejar","start":31.588389,"end":31.908389}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-22-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-22-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 30.068389);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 30.068389);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-22-bg" + i);
+      var wordEl = document.getElementById("hl-grp-22-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 31.858389);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 31.958389);
+  })();
+
+  // Group 23: "un cráter visible." [31.908, 33.247] scene=tunguska-consecuencia
+  (function(){
+    var grp = document.getElementById("hl-grp-23");
+    var groupWords = [{"text":"un","start":31.908389,"end":32.068389},{"text":"cráter","start":32.068389,"end":32.468389},{"text":"visible.","start":32.468389,"end":33.188389}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-23-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-23-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 31.908389);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 31.908389);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-23-bg" + i);
+      var wordEl = document.getElementById("hl-grp-23-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 33.147414);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 33.247414);
+  })();
+
+  // Group 24: "¿Qué tan preparados estamos" [33.297, 35.007] scene=tunguska-cierre
+  (function(){
+    var grp = document.getElementById("hl-grp-24");
+    var groupWords = [{"text":"¿Qué","start":33.297414,"end":33.617414},{"text":"tan","start":33.617414,"end":33.857414},{"text":"preparados","start":33.857414,"end":34.497414},{"text":"estamos","start":34.497414,"end":34.817414}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-24-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-24-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 33.297414);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 33.297414);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-24-bg" + i);
+      var wordEl = document.getElementById("hl-grp-24-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 34.907414);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 35.007414);
+  })();
+
+  // Group 25: "hoy para un evento" [35.057, 36.467] scene=tunguska-cierre
+  (function(){
+    var grp = document.getElementById("hl-grp-25");
+    var groupWords = [{"text":"hoy","start":35.057414,"end":35.537414},{"text":"para","start":35.537414,"end":35.857414},{"text":"un","start":35.857414,"end":36.017414},{"text":"evento","start":36.017414,"end":36.417414}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-25-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-25-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 35.057414);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 35.057414);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-25-bg" + i);
+      var wordEl = document.getElementById("hl-grp-25-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 36.367414);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 36.467414);
+  })();
+
+  // Group 26: "como este?" [36.417, 37.381] scene=tunguska-cierre
+  (function(){
+    var grp = document.getElementById("hl-grp-26");
+    var groupWords = [{"text":"como","start":36.417414,"end":36.737414},{"text":"este?","start":36.737414,"end":37.137414}];
+    var groupText = groupWords.map(function(w){return w.text.toUpperCase();}).join(" ");
+    var computedSize = fitFontSize(groupText, CAPTION_BASE_FONT, "800", "Montserrat", CAPTION_MAX_WIDTH);
+    groupWords.forEach(function(w, i){
+      var wordEl = document.createElement("span");
+      wordEl.className = "hl-word";
+      wordEl.id = "hl-grp-26-w" + i;
+      wordEl.style.fontSize = computedSize + "px";
+      var bgEl = document.createElement("span");
+      bgEl.className = "hl-word-bg";
+      bgEl.id = "hl-grp-26-bg" + i;
+      var textEl = document.createElement("span");
+      textEl.className = "hl-word-text";
+      textEl.textContent = w.text.toUpperCase();
+      wordEl.appendChild(bgEl);
+      wordEl.appendChild(textEl);
+      grp.appendChild(wordEl);
+    });
+    tl.set(grp, { visibility: "visible" }, 36.417414);
+    tl.fromTo(grp, { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 36.417414);
+    groupWords.forEach(function(w, i){
+      var bgEl = document.getElementById("hl-grp-26-bg" + i);
+      var wordEl = document.getElementById("hl-grp-26-w" + i);
+      tl.to(bgEl, { opacity: 1, scaleX: 1, duration: 0.15, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1.05)", duration: 0.08, ease: "power2.out" }, w.start);
+      tl.to(wordEl, { filter: "brightness(1)", duration: 0.16, ease: "power2.out" }, w.start + 0.08);
+      tl.to(bgEl, { opacity: 0, scaleX: 1.02, duration: 0.1, ease: "power2.in" }, w.end);
+      tl.set(bgEl, { scaleX: 0 }, w.end + 0.1);
+    });
+    tl.to(grp, { opacity: 0, duration: 0.1, ease: "power2.in" }, 37.280566);
+    tl.set(grp, { opacity: 0, visibility: "hidden" }, 37.380566);
+  })();
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

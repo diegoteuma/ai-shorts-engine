@@ -1,0 +1,49 @@
+{
+  "id": "tunguska",
+  "topic": "Explosión de Tunguska (1908)",
+  "title": "La explosión que derribó 80 millones de árboles",
+  "scenes": [
+    {
+      "id": "tunguska-gancho",
+      "role": "GANCHO",
+      "order": 1,
+      "narrationText": "Una explosión en el cielo derribó 80 millones de árboles en cuestión de segundos.",
+      "targetDuration": "PT4.458231S"
+    },
+    {
+      "id": "tunguska-explicacion",
+      "role": "EXPLICACION",
+      "order": 2,
+      "narrationText": "Un objeto espacial entró a la atmósfera y explotó antes de tocar el suelo, liberando una onda de choque devastadora.",
+      "targetDuration": "PT6.919546S"
+    },
+    {
+      "id": "tunguska-contexto",
+      "role": "CONTEXTO",
+      "order": 3,
+      "narrationText": "Esto ocurrió el 30 de junio de 1908, en Siberia, Rusia: el evento se conoce como la explosión de Tunguska.",
+      "targetDuration": "PT7.987664S"
+    },
+    {
+      "id": "tunguska-giro",
+      "role": "GIRO",
+      "order": 4,
+      "narrationText": "Ahora, imaginemos algo distinto: ¿qué habría pasado si esa explosión hubiera ocurrido sobre una gran ciudad?",
+      "targetDuration": "PT6.222948S"
+    },
+    {
+      "id": "tunguska-consecuencia",
+      "role": "CONSECUENCIA",
+      "order": 5,
+      "narrationText": "La onda expansiva habría arrasado edificios y infraestructuras en un radio de varios kilómetros, sin dejar un cráter visible.",
+      "targetDuration": "PT7.709025S"
+    },
+    {
+      "id": "tunguska-cierre",
+      "role": "CIERRE",
+      "order": 6,
+      "narrationText": "¿Qué tan preparados estamos hoy para un evento como este?",
+      "targetDuration": "PT4.133152S"
+    }
+  ]
+}

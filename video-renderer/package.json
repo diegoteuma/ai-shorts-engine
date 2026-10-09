@@ -1,0 +1,16 @@
+{
+  "name": "video-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Genera la composición HyperFrames (video final 9:16 con subtítulos de palabra resaltada) a partir de una Story del backend. Sin dependencias de runtime.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "transcribe": "node src/transcribe.mjs",
+    "compare-transcripts": "node src/compare-transcripts.mjs",
+    "generate": "node src/generate.mjs"
+  }
+}
