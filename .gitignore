@@ -5,3 +5,6 @@
 
 # Borradores del generador de historias (PUERTA 0): estado local, no se versiona
 /data/drafts/
+/data/
+/data/clips/
+/data/stories/

@@ -1,0 +1,6 @@
+/build/
+/out/
+/transcripts/
+/assets/
+/tunguska.json
+node_modules/
