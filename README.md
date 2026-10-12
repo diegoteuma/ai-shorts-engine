@@ -329,6 +329,19 @@ preguntara "¿ya terminó?". Agregué `StoryApprovalService.pollGenerationStatus
 para eso: hay que llamarlo seguido (polling) hasta que la historia esté
 `GENERATED`.
 
+**Copia local de los clips.** Cuando `poll-generation` deja *todas* las
+escenas `COMPLETED`, el controlador además descarga cada clip desde
+`generatedAssetUrl` a `CLIPS_DIR/<idEscena>.mp4` (`./data/clips` por
+defecto) y guarda la ruta relativa en `localClipPath` de la escena. La
+respuesta trae un campo `clips` con lo guardado, lo que ya estaba y lo que
+falló. Un fallo (URL vencida, archivo que no es MP4, tamaño distinto de
+720x1280, poco disco) **no bloquea el poll**: la escena sigue `COMPLETED`,
+con su URL y un `localClipFailureReason`, y se reintenta volviendo a llamar
+a `poll-generation`. Cada clip se valida (estructura MP4, dimensiones) antes
+de publicarse con un move atómico. `reset-generation` borra el clip local de
+las escenas reseteadas. En `application.yml`, `clip-download.*` fija el tope
+por clip, el timeout total y el disco libre mínimo.
+
 Cada handler sigue siempre el mismo patrón: leer la `Story` guardada →
 llamar un único método de `StoryApprovalService` → guardar el resultado →
 devolver el estado actualizado. `StoryController` es routing puro;
@@ -354,7 +367,9 @@ ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID
 
 Opcionales (con default): `API_PORT` (8080, mapeado a `server.port` en
 `application.yml`), `DATA_DIR` (`./data/stories`), `AUDIO_DIR`
-(`./data/audio`), `CLAUDE_MODEL` (`claude-sonnet-5-5`) y las del generador
+(`./data/audio`), `CLIPS_DIR` (`./data/clips`), `CLIP_MAX_BYTES` (64 MiB),
+`CLIP_DOWNLOAD_TIMEOUT_SECONDS` (120), `CLIP_MIN_FREE_BYTES` (512 MiB),
+`CLAUDE_MODEL` (`claude-sonnet-5-5`) y las del generador
 de historias (ver "Generador de historias" arriba). Esto resuelve, de la forma más simple posible, el
 pendiente de "manejo de credenciales" — variables de entorno alcanzan para
 un piloto de una persona; un secret manager sería sobre-ingeniería hoy.

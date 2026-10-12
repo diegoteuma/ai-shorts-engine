@@ -30,6 +30,22 @@ elevenlabs:
 engine:
   data-dir: ${DATA_DIR:./data/stories}
   audio-dir: ${AUDIO_DIR:./data/audio}
+  # Copia local de los clips de Higgsfield (se guardan cuando poll-generation deja
+  # TODAS las escenas COMPLETED). El directorio se crea al descargar el primer clip.
+  clips-dir: ${CLIPS_DIR:./data/clips}
+
+# Límites de la descarga de clips. max-bytes es por clip (los 6 clips reales de
+# tunguska pesan entre 3.0 y 16.2 MB); el timeout es el total por clip, no por
+# lectura; min-free-bytes es el disco libre mínimo para empezar una descarga
+# (la VM de producción tiene ~4 GB libres). Resolución esperada: la que se pide a
+# Higgsfield (9:16, 720p); otro tamaño se rechaza y se avisa.
+clip-download:
+  max-bytes: ${CLIP_MAX_BYTES:67108864}
+  timeout-seconds: ${CLIP_DOWNLOAD_TIMEOUT_SECONDS:120}
+  connect-timeout-seconds: ${CLIP_CONNECT_TIMEOUT_SECONDS:10}
+  min-free-bytes: ${CLIP_MIN_FREE_BYTES:536870912}
+  expected-width: 720
+  expected-height: 1280
 
 # Generador de historias (paso previo al pipeline: propuestas, borrador con
 # búsqueda web y PUERTA 0). Usa la misma API key y modelo de claude.* de

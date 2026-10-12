@@ -45,6 +45,16 @@ public final class Scene {
     private String generatedAssetUrl;
     private String generationFailureReason;
 
+    /**
+     * Copia local del clip generado, como ruta RELATIVA al directorio de clips
+     * ({@code engine.clips-dir}), p. ej. {@code tunguska-gancho.mp4}. Null si
+     * todavía no se descargó o falló. Relativa a propósito: portable entre
+     * máquinas (a diferencia de narrationAudioPath, que es absoluta).
+     */
+    private String localClipPath;
+    /** Motivo de la última descarga fallida del clip; null si no hubo fallo o ya se resolvió. */
+    private String localClipFailureReason;
+
     public Scene(String id, SceneRole role, int order, String narrationText, String visualPrompt, Duration targetDuration) {
         this.id = Objects.requireNonNull(id, "id");
         this.role = Objects.requireNonNull(role, "role");
@@ -223,6 +233,23 @@ public final class Scene {
         this.generationStatus = GenerationStatus.FAILED;
     }
 
+    /** Registra que el clip ya está guardado localmente. Solo tiene sentido con la generación COMPLETED. */
+    public void attachLocalClip(String relativePath) {
+        requireCompleted("adjuntar el clip local");
+        this.localClipPath = Objects.requireNonNull(relativePath, "relativePath");
+        this.localClipFailureReason = null;
+    }
+
+    /** Registra por qué falló la descarga del clip (no cambia generationStatus: la generación sí terminó). */
+    public void recordClipDownloadFailure(String reason) {
+        requireCompleted("registrar un fallo de descarga del clip");
+        this.localClipFailureReason = Objects.requireNonNull(reason, "reason");
+    }
+
+    public boolean hasLocalClip() {
+        return localClipPath != null;
+    }
+
     public boolean isReadyToGenerate() {
         return isCostApproved() && generationStatus == GenerationStatus.NOT_STARTED;
     }
@@ -257,6 +284,9 @@ public final class Scene {
         this.higgsfieldStatusUrl = null;
         this.generatedAssetUrl = null;
         this.generationFailureReason = null;
+        // El archivo en disco lo borra quien llama (ClipStore): Scene no hace E/S.
+        this.localClipPath = null;
+        this.localClipFailureReason = null;
     }
 
     // --- guards ------------------------------------------------------------------------
@@ -274,6 +304,14 @@ public final class Scene {
             throw new IllegalStateException(
                     "No se puede " + action + " para la escena '" + id
                             + "': el costo todavía no fue aprobado (estado: " + costStatus + ").");
+        }
+    }
+
+    private void requireCompleted(String action) {
+        if (generationStatus != GenerationStatus.COMPLETED) {
+            throw new IllegalStateException(
+                    "No se puede " + action + " para la escena '" + id
+                            + "': la generación no está completa (estado: " + generationStatus + ").");
         }
     }
 
@@ -295,7 +333,8 @@ public final class Scene {
                 costStatus, costEstimate, costRejectionNote,
                 narrationAudioPath,
                 generationStatus, higgsfieldRequestId, higgsfieldStatusUrl,
-                generatedAssetUrl, generationFailureReason);
+                generatedAssetUrl, generationFailureReason,
+                localClipPath, localClipFailureReason);
     }
 
     /**
@@ -323,6 +362,8 @@ public final class Scene {
         scene.higgsfieldStatusUrl = snapshot.higgsfieldStatusUrl();
         scene.generatedAssetUrl = snapshot.generatedAssetUrl();
         scene.generationFailureReason = snapshot.generationFailureReason();
+        scene.localClipPath = snapshot.localClipPath();
+        scene.localClipFailureReason = snapshot.localClipFailureReason();
         return scene;
     }
 
@@ -348,6 +389,8 @@ public final class Scene {
     public String higgsfieldStatusUrl() { return higgsfieldStatusUrl; }
     public String generatedAssetUrl() { return generatedAssetUrl; }
     public String generationFailureReason() { return generationFailureReason; }
+    public String localClipPath() { return localClipPath; }
+    public String localClipFailureReason() { return localClipFailureReason; }
 
     @Override
     public String toString() {

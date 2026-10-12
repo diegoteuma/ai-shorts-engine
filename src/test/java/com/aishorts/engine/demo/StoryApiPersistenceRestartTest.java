@@ -1,5 +1,7 @@
 package com.aishorts.engine.demo;
 
+import com.aishorts.engine.clips.ClipDownloader;
+import com.aishorts.engine.clips.FakeClipDownloader;
 import com.aishorts.engine.domain.GenerationStatus;
 import com.aishorts.engine.domain.Story;
 import com.aishorts.engine.duration.WordsPerSecondDurationEstimator;
@@ -60,6 +62,8 @@ class StoryApiPersistenceRestartTest {
     static void engineProperties(DynamicPropertyRegistry registry) {
         registry.add("DATA_DIR", () -> dataDir.resolve("stories").toString());
         registry.add("AUDIO_DIR", () -> dataDir.resolve("audio").toString());
+        // Los clips se guardan en el tempdir del test, nunca en ./data/clips del repo.
+        registry.add("CLIPS_DIR", () -> dataDir.resolve("clips").toString());
         // Credenciales dummy: nunca se usan de verdad (los Fake* las reemplazan),
         // solo hacen falta para que EngineConfiguration pueda resolver sus
         // @Value y construir sus beans "reales" (que quedan sin usar, ver @Primary).
@@ -213,6 +217,13 @@ class StoryApiPersistenceRestartTest {
         @Primary
         ScriptDraftingService fakeScriptDraftingService() {
             return new FakeScriptDraftingService();
+        }
+
+        // poll-generation guarda los clips al completarse todas las escenas: sin esto bajaría de fake.higgsfield.local.
+        @Bean
+        @Primary
+        ClipDownloader fakeClipDownloader() {
+            return new FakeClipDownloader();
         }
     }
 }
