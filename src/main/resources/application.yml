@@ -54,7 +54,10 @@ engine:
       transcribe-scene-seconds: ${FINAL_VIDEO_TRANSCRIBE_TIMEOUT_SECONDS:600}
       generate-seconds: ${FINAL_VIDEO_GENERATE_TIMEOUT_SECONDS:120}
       lint-seconds: ${FINAL_VIDEO_LINT_TIMEOUT_SECONDS:120}
-      check-seconds: ${FINAL_VIDEO_CHECK_TIMEOUT_SECONDS:300}
+      # check: 1200 PROVISORIO. En Windows check tardó 47 s y render 61 s, y en la VM el
+      # render tardó 1014 s (~17 veces más). Si check escala parecido (HIPÓTESIS SIN MEDIR
+      # en la VM) rondaría los 800 s y 300 mataría corridas sanas. Ajustar al medirlo.
+      check-seconds: ${FINAL_VIDEO_CHECK_TIMEOUT_SECONDS:1200}
       render-seconds: ${FINAL_VIDEO_RENDER_TIMEOUT_SECONDS:1800}
 
 # Límites de la descarga de clips. max-bytes es por clip (los 6 clips reales de

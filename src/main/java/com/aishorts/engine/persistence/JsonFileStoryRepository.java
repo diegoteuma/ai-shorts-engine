@@ -1,6 +1,7 @@
 package com.aishorts.engine.persistence;
 
 import com.aishorts.engine.domain.Story;
+import com.aishorts.engine.domain.StoryIds;
 import com.aishorts.engine.domain.StorySnapshot;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -65,7 +66,13 @@ public final class JsonFileStoryRepository implements StoryRepository {
         if (!Files.isRegularFile(file)) {
             return Optional.empty();
         }
-        return Optional.of(read(file));
+        Story story = read(file);
+        if (!storyId.equals(story.id())) {
+            // Posible con archivos guardados antes de validar ids, cuando "a.b" se guardaba como a_b.json.
+            throw new PersistenceException("El archivo '" + file + "' contiene la historia '" + story.id()
+                    + "', no '" + storyId + "' (guardado antes de validar ids); hay que corregirlo a mano.");
+        }
+        return Optional.of(story);
     }
 
     @Override
@@ -96,8 +103,12 @@ public final class JsonFileStoryRepository implements StoryRepository {
         }
     }
 
+    /**
+     * El id se usa tal cual como nombre de archivo, y si no sirve se rechaza
+     * (IllegalArgumentException). Antes se sustituían los caracteres inválidos
+     * por "_", con lo que "a.b" y "a_b" se pisaban en el mismo archivo.
+     */
     private Path fileFor(String storyId) {
-        String safeName = storyId.replaceAll("[^a-zA-Z0-9_-]", "_");
-        return baseDir.resolve(safeName + ".json");
+        return baseDir.resolve(StoryIds.requireValid(storyId) + ".json");
     }
 }

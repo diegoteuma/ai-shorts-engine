@@ -135,6 +135,7 @@ class FinalVideoApiTest {
         assertThat(arg(cmd, "--audio-dir")).isEqualTo(dataDir.resolve("audio").toAbsolutePath().normalize().toString());
         assertThat(arg(cmd, "--render-timeout-sec")).isEqualTo("1800");
         assertThat(arg(cmd, "--transcribe-timeout-sec")).isEqualTo("600");
+        assertThat(arg(cmd, "--check-timeout-sec")).isEqualTo("1200"); // default provisorio de application.yml
         assertThat(cmd).doesNotContain("--keep-work");
         Path work = Path.of(arg(cmd, "--work"));
         assertThat(work).isEqualTo(dataDir.resolve("renders").resolve("fv-ok").resolve("job-" + jobId).resolve("work").toAbsolutePath().normalize());

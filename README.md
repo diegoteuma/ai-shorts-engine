@@ -305,9 +305,11 @@ Variables (todas con default, en `engine.final-video` de `application.yml`):
 timeouts en segundos `FINAL_VIDEO_TRANSCRIBE_TIMEOUT_SECONDS` (600, por
 escena), `FINAL_VIDEO_GENERATE_TIMEOUT_SECONDS` (120),
 `FINAL_VIDEO_LINT_TIMEOUT_SECONDS` (120), `FINAL_VIDEO_CHECK_TIMEOUT_SECONDS`
-(300) y `FINAL_VIDEO_RENDER_TIMEOUT_SECONDS` (1800). Solo el de render se
+(1200) y `FINAL_VIDEO_RENDER_TIMEOUT_SECONDS` (1800). Solo el de render se
 apoya en una medición (1014 s para tunguska en la VM); los demás son valores
-iniciales.
+iniciales. El de `check` es **provisorio**: en Windows `check` tardó 47 s y
+`render` 61 s, y en la VM el render tardó 1014 s; si `check` escala parecido
+(hipótesis **sin medir** en la VM), 300 s mataría corridas sanas.
 
 Requisitos del servidor: Node ≥ 22, FFmpeg (`ffprobe` en el PATH), Chrome
 Headless Shell para HyperFrames y acceso a `registry.npmjs.org` y, la primera

@@ -131,9 +131,16 @@ public final class StoryApprovalService {
                 continue;
             }
             try {
+                Path audioPath = audioOutputDir.resolve(scene.id() + ".mp3");
+                // Defensa en profundidad (el id de historia ya se valida en la entrada y en el repositorio):
+                // el mp3 tiene que caer directamente en audioOutputDir. Se comprueba ANTES de pagar la síntesis.
+                Path dir = audioOutputDir.toAbsolutePath().normalize();
+                if (!dir.equals(audioPath.toAbsolutePath().normalize().getParent())) {
+                    throw new IllegalArgumentException("La ruta del audio de la escena '" + scene.id()
+                            + "' queda fuera de " + dir + "; no se escribe.");
+                }
                 TtsResult result = ttsService.synthesize(scene.narrationText());
                 Files.createDirectories(audioOutputDir);
-                Path audioPath = audioOutputDir.resolve(scene.id() + ".mp3");
                 Files.write(audioPath, result.audioBytes());
                 scene.attachNarrationAudio(audioPath.toString(), result.duration());
                 succeeded.add(scene.id());
