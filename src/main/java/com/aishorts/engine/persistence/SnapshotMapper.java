@@ -79,6 +79,8 @@ public final class SnapshotMapper {
         map.put("higgsfieldStatusUrl", scene.higgsfieldStatusUrl());
         map.put("generatedAssetUrl", scene.generatedAssetUrl());
         map.put("generationFailureReason", scene.generationFailureReason());
+        map.put("localClipPath", scene.localClipPath());
+        map.put("localClipFailureReason", scene.localClipFailureReason());
         return map;
     }
 
@@ -104,7 +106,10 @@ public final class SnapshotMapper {
                 str(map, "higgsfieldRequestId"),
                 str(map, "higgsfieldStatusUrl"),
                 str(map, "generatedAssetUrl"),
-                str(map, "generationFailureReason")
+                str(map, "generationFailureReason"),
+                // Ausentes en los JSON guardados antes de existir la copia local: str() devuelve null.
+                str(map, "localClipPath"),
+                str(map, "localClipFailureReason")
         );
     }
 

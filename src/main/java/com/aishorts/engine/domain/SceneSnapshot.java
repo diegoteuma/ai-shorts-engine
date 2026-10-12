@@ -36,6 +36,8 @@ public record SceneSnapshot(
         String higgsfieldRequestId,
         String higgsfieldStatusUrl,
         String generatedAssetUrl,
-        String generationFailureReason
+        String generationFailureReason,
+        String localClipPath,
+        String localClipFailureReason
 ) {
 }

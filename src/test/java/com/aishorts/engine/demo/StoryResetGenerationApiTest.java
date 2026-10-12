@@ -1,5 +1,7 @@
 package com.aishorts.engine.demo;
 
+import com.aishorts.engine.clips.ClipDownloader;
+import com.aishorts.engine.clips.FakeClipDownloader;
 import com.aishorts.engine.domain.GenerationStatus;
 import com.aishorts.engine.domain.SceneCostStatus;
 import com.aishorts.engine.domain.Story;
@@ -51,6 +53,8 @@ class StoryResetGenerationApiTest {
     static void engineProperties(DynamicPropertyRegistry registry) {
         registry.add("DATA_DIR", () -> dataDir.resolve("stories").toString());
         registry.add("AUDIO_DIR", () -> dataDir.resolve("audio").toString());
+        // Los clips se guardan en el tempdir del test, nunca en ./data/clips del repo.
+        registry.add("CLIPS_DIR", () -> dataDir.resolve("clips").toString());
         registry.add("CLAUDE_API_KEY", () -> "test-claude-key");
         registry.add("CLAUDE_MODEL", () -> "test-claude-model");
         registry.add("HIGGSFIELD_BASE_URL", () -> "https://higgsfield.invalid");
@@ -284,6 +288,13 @@ class StoryResetGenerationApiTest {
         @Primary
         ScriptDraftingService fakeScriptDraftingService() {
             return new FakeScriptDraftingService();
+        }
+
+        // poll-generation guarda los clips al completarse todas las escenas: sin esto bajaría de fake.higgsfield.local.
+        @Bean
+        @Primary
+        ClipDownloader fakeClipDownloader() {
+            return new FakeClipDownloader();
         }
     }
 }

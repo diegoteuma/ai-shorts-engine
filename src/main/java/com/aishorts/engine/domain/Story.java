@@ -95,6 +95,11 @@ public final class Story {
                         || s.generationStatus() == GenerationStatus.FAILED);
     }
 
+    /** Todas las escenas con generación COMPLETED (condición para guardar los clips localmente). */
+    public boolean allScenesCompleted() {
+        return scenes.stream().allMatch(s -> s.generationStatus() == GenerationStatus.COMPLETED);
+    }
+
     /**
      * Estado agregado derivado, recalculado en cada consulta a partir del
      * estado real de las escenas (nunca hay drift entre el estado de la

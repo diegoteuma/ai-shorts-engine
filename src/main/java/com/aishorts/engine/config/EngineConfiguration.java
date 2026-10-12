@@ -1,6 +1,9 @@
 package com.aishorts.engine.config;
 
 import com.aishorts.engine.approval.StoryApprovalService;
+import com.aishorts.engine.clips.ClipDownloader;
+import com.aishorts.engine.clips.ClipStore;
+import com.aishorts.engine.clips.HttpClipDownloader;
 import com.aishorts.engine.claude.ClaudeConfig;
 import com.aishorts.engine.difficulty.DefaultSceneDifficultyScorer;
 import com.aishorts.engine.domain.GenerationTier;
@@ -26,6 +29,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Map;
 
 /**
@@ -112,6 +116,26 @@ public class EngineConfiguration {
     @Bean
     StoryRepository storyRepository(@Value("${engine.data-dir}") String dataDir, ObjectMapper objectMapper) {
         return new JsonFileStoryRepository(Path.of(dataDir), objectMapper);
+    }
+
+    @Bean
+    ClipDownloader clipDownloader(
+            @Value("${clip-download.max-bytes}") long maxBytes,
+            @Value("${clip-download.timeout-seconds}") long timeoutSeconds,
+            @Value("${clip-download.connect-timeout-seconds}") long connectTimeoutSeconds
+    ) {
+        return new HttpClipDownloader(maxBytes, Duration.ofSeconds(connectTimeoutSeconds), Duration.ofSeconds(timeoutSeconds));
+    }
+
+    @Bean
+    ClipStore clipStore(
+            @Value("${engine.clips-dir}") String clipsDir,
+            ClipDownloader clipDownloader,
+            @Value("${clip-download.expected-width}") int expectedWidth,
+            @Value("${clip-download.expected-height}") int expectedHeight,
+            @Value("${clip-download.min-free-bytes}") long minFreeBytes
+    ) {
+        return new ClipStore(Path.of(clipsDir), clipDownloader, expectedWidth, expectedHeight, minFreeBytes);
     }
 
     @Bean

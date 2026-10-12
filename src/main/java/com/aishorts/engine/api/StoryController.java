@@ -4,6 +4,8 @@ import com.aishorts.engine.approval.BatchResult;
 import com.aishorts.engine.approval.CostDecision;
 import com.aishorts.engine.approval.PromptDecision;
 import com.aishorts.engine.approval.StoryApprovalService;
+import com.aishorts.engine.clips.ClipStore;
+import com.aishorts.engine.clips.ClipSyncResult;
 import com.aishorts.engine.difficulty.DifficultyFactors;
 import com.aishorts.engine.domain.Story;
 import com.aishorts.engine.drafts.StoryIndex;
@@ -53,8 +55,12 @@ import java.util.UUID;
  * POST   /stories/{id}/cost-decisions     applyCostDecisions     (PUERTA 2)
  * POST   /stories/{id}/generate           generateApprovedScenes
  * POST   /stories/{id}/poll-generation    pollGenerationStatus  (llamar seguido hasta que termine)
+ *                                          Cuando TODAS las escenas quedan COMPLETED, además guarda los clips
+ *                                          en engine.clips-dir (campo "clips" de la respuesta). Una descarga
+ *                                          fallida no bloquea: se reintenta llamando de nuevo.
  * POST   /stories/{id}/reset-generation   resetAllScenesForRegeneration / resetScenesForRegeneration
  *                                          (body omitido -> todas; lista de sceneIds -> parcial; [] -> 400)
+ *                                          Borra también la copia local del clip de las escenas reseteadas.
  * </pre>
  */
 @RestController
@@ -66,19 +72,22 @@ public class StoryController {
     private final StoryRepository repository;
     private final Path narrationAudioDir;
     private final StoryIndex storyIndex;
+    private final ClipStore clipStore;
 
     public StoryController(
             StoryApprovalService approvalService,
             StoryDraftingService draftingService,
             StoryRepository repository,
             @Qualifier("narrationAudioDir") Path narrationAudioDir,
-            StoryIndex storyIndex
+            StoryIndex storyIndex,
+            ClipStore clipStore
     ) {
         this.approvalService = approvalService;
         this.draftingService = draftingService;
         this.repository = repository;
         this.narrationAudioDir = narrationAudioDir;
         this.storyIndex = storyIndex;
+        this.clipStore = clipStore;
     }
 
     /**
@@ -164,8 +173,15 @@ public class StoryController {
     public Map<String, Object> pollGeneration(@PathVariable("id") String id) {
         Story story = loadOrNotFound(id);
         BatchResult result = approvalService.pollGenerationStatus(story);
+        // Se persiste lo pollado ANTES de tocar red/disco: un fallo al descargar no puede perder el avance.
         repository.save(story);
-        return batchResponse(result, story);
+        ClipSyncResult clips = clipStore.syncIfAllCompleted(story);
+        if (clips.changedScenes()) {
+            repository.save(story);
+        }
+        Map<String, Object> response = batchResponse(result, story);
+        response.put("clips", clipsResponse(clips));
+        return response;
     }
 
     @PostMapping("/{id}/reset-generation")
@@ -176,6 +192,8 @@ public class StoryController {
                 ? approvalService.resetAllScenesForRegeneration(story)
                 : approvalService.resetScenesForRegeneration(story, sceneIds);
         repository.save(story);
+        // Después de guardar: si el borrado falla queda un archivo huérfano (se pisa al regenerar), nunca un estado incoherente.
+        clipStore.deleteClips(result.succeededSceneIds());
         return batchResponse(result, story);
     }
 
@@ -184,6 +202,15 @@ public class StoryController {
     private Story loadOrNotFound(String storyId) {
         return repository.findById(storyId)
                 .orElseThrow(() -> new ApiError(404, "No existe una historia con id '" + storyId + "'."));
+    }
+
+    private Map<String, Object> clipsResponse(ClipSyncResult clips) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("attempted", clips.attempted());
+        map.put("storedSceneIds", clips.storedSceneIds());
+        map.put("alreadyPresentSceneIds", clips.alreadyPresent());
+        map.put("failedSceneIds", clips.failedSceneIds());
+        return map;
     }
 
     private Map<String, Object> batchResponse(BatchResult result, Story story) {
