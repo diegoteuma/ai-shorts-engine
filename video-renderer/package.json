@@ -11,6 +11,7 @@
     "test": "node --test \"test/**/*.test.mjs\"",
     "transcribe": "node src/transcribe.mjs",
     "compare-transcripts": "node src/compare-transcripts.mjs",
-    "generate": "node src/generate.mjs"
+    "generate": "node src/generate.mjs",
+    "make-video": "node src/make-video.mjs"
   }
 }

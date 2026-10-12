@@ -252,7 +252,95 @@ web está deshabilitada en tu organización de Claude, los endpoints responden
 
 El pipeline termina en COMPLETED por escena. El montaje y los subtítulos se
 hacen manualmente con los clips (generatedAssetUrl), el audio
-(narrationAudioPath) y el texto (narrationText) de GET /stories/{id}.
+(narrationAudioPath) y el texto (narrationText) de GET /stories/{id}, o con
+el endpoint de video final (abajo), que está deshabilitado por defecto.
+
+## Video final (`video/`, deshabilitado por defecto)
+
+> **No exponer a internet sin autenticación.** La API no tiene auth y este
+> endpoint lanza procesos pesados (Node, Chrome, FFmpeg) durante ~17 min. Por
+> eso viene apagado: sin `FINAL_VIDEO_ENABLED=true` no existen ni el servicio
+> ni las rutas (404).
+
+`POST /stories/{id}/final-video` valida todo de forma síncrona y, si está
+bien, responde **202** y lanza en segundo plano **un único** proceso:
+`node video-renderer/src/make-video.mjs`, que transcribe cada escena
+(Parakeet vía `hyperframes transcribe`), genera la composición
+(`generate.mjs`), corre `hyperframes lint` y `check`, renderiza con
+`hyperframes@0.8.143 render --workers 1 --quality standard` y valida el MP4
+con `ffprobe` (720×1280, video y audio, duración = suma de `targetDuration`
+± 0.25 s). Java no reimplementa nada de HyperFrames: solo valida, lanza el
+proceso, lee `make-video-result.json` y publica el MP4 con un move atómico.
+
+| Ruta | Respuesta |
+|---|---|
+| `POST /stories/{id}/final-video` (cuerpo opcional `{"force": true}`) | 202 `{jobId, storyId, status, stage}` + `Location`. 404 historia inexistente. 409 si ya hay un render en curso **de cualquier historia** (trae su `jobId`), si ya existe el video y no se pasó `force`, o si hay escenas sin terminar (falta clip local, falta audio, generación no COMPLETED, poco disco, Node no disponible). 422 por datos inválidos (ids fuera de `[A-Za-z0-9_-]`, clip que no pasa `Mp4Probe` o no es 720×1280). 409/422 traen `scenes: {idEscena: motivo}` y no lanzan nada. |
+| `GET /stories/{id}/final-video` | El trabajo vigente: `status` (PENDING, RUNNING, COMPLETED, FAILED), `stage` (en curso o la que falló), `stages` (ms y código de salida de cada etapa), `warnings`, `error`, `logTail` (últimos 4 KB del log de la etapa fallida), `output`. 404 si nunca hubo uno. |
+| `GET /stories/{id}/final-video/file` | El MP4 (`video/mp4`, admite `Range`). 404 si el trabajo vigente no está COMPLETED. |
+
+Reglas:
+- **Un render a la vez** en todo el backend; dos POST simultáneos no pueden
+  lanzar dos (lo decide una guarda dentro de un `synchronized`).
+- Los clips salen de `CLIPS_DIR` (`<idEscena>.mp4`, los que guarda
+  `poll-generation`) y el audio de `AUDIO_DIR/<idEscena>.mp3`. **No** se usa
+  `narrationAudioPath` (es una ruta absoluta de la máquina que sintetizó) y
+  **no** se descarga nada de Higgsfield.
+- Solo fallan los errores: los avisos de `generate`, `lint` y `check` se
+  devuelven en `warnings`.
+- El MP4 nuevo reemplaza al anterior recién cuando está completo y validado.
+  Si un re-render con `force` falla, el video anterior sigue en disco
+  (`RENDERS_DIR/<id>/final.mp4`), pero `GET .../file` responde 404 porque el
+  trabajo vigente quedó FAILED.
+- Al arrancar, un trabajo que había quedado PENDING/RUNNING se marca FAILED
+  ("interrumpido por reinicio"). No hay reintentos automáticos ni cola.
+- En disco: `RENDERS_DIR/<idHistoria>/job.json`, `final.mp4` y
+  `job-<idTrabajo>/` (historia pasada a Node, `make-video.log` y la carpeta de
+  trabajo con `logs/<etapa>.log`). Un trabajo nuevo borra las `job-*` anteriores.
+
+Variables (todas con default, en `engine.final-video` de `application.yml`):
+`FINAL_VIDEO_ENABLED` (false), `RENDERS_DIR` (`./data/renders`),
+`VIDEO_RENDERER_DIR` (`./video-renderer`), `NODE_COMMAND` (`node`),
+`FINAL_VIDEO_MIN_FREE_BYTES` (1 GiB, **suposición sin medir**),
+`FINAL_VIDEO_KEEP_WORK` (false; true conserva assets para depurar) y los
+timeouts en segundos `FINAL_VIDEO_TRANSCRIBE_TIMEOUT_SECONDS` (600, por
+escena), `FINAL_VIDEO_GENERATE_TIMEOUT_SECONDS` (120),
+`FINAL_VIDEO_LINT_TIMEOUT_SECONDS` (120), `FINAL_VIDEO_CHECK_TIMEOUT_SECONDS`
+(1200) y `FINAL_VIDEO_RENDER_TIMEOUT_SECONDS` (1800). Solo el de render se
+apoya en una medición (1014 s para tunguska en la VM); los demás son valores
+iniciales. El de `check` es **provisorio**: en Windows `check` tardó 47 s y
+`render` 61 s, y en la VM el render tardó 1014 s; si `check` escala parecido
+(hipótesis **sin medir** en la VM), 300 s mataría corridas sanas.
+
+Requisitos del servidor: Node ≥ 22, FFmpeg (`ffprobe` en el PATH), Chrome
+Headless Shell para HyperFrames y acceso a `registry.npmjs.org` y, la primera
+vez, a `huggingface.co` (descarga del modelo Parakeet).
+
+```bash
+FINAL_VIDEO_ENABLED=true ... mvn spring-boot:run
+
+curl -i -X POST localhost:8080/stories/tunguska/final-video          # 202 + jobId
+curl -s localhost:8080/stories/tunguska/final-video                  # estado, etapa, tiempos
+curl -o tunguska.mp4 localhost:8080/stories/tunguska/final-video/file
+curl -i -X POST -H 'Content-Type: application/json' -d '{"force":true}' \
+     localhost:8080/stories/tunguska/final-video                     # rehacerlo
+```
+
+### Medir en la VM con el backend levantado (pendiente)
+
+Lo medido hasta ahora en `ai-shorts-vm` es solo el render suelto (1014 s,
+419 MB mínimos disponibles). Falta medir Parakeet y el render con la JVM
+corriendo al lado. Procedimiento:
+
+1. Levantar el backend con `FINAL_VIDEO_ENABLED=true` y una historia con los
+   6 clips en `CLIPS_DIR` y los audios en `AUDIO_DIR`.
+2. En otra terminal, muestrear la memoria durante todo el trabajo:
+   `while true; do echo "$(date +%T) $(free -m | awk '/Mem:/ {print $7}')"; sleep 5; done | tee memoria.log`
+   (columna "available", en MB).
+3. `curl -X POST .../final-video` y esperar a que `GET .../final-video`
+   quede COMPLETED o FAILED. Los tiempos por etapa (y por escena en
+   `transcribe`) ya quedan en `stages` del estado.
+4. Anotar el mínimo de `memoria.log`, los `stages` y `df -h` antes y después;
+   con eso ajustar los timeouts y `FINAL_VIDEO_MIN_FREE_BYTES`.
 
 ## Persistencia (Fase 1 — sin nube, sin base de datos)
 
@@ -369,7 +457,8 @@ Opcionales (con default): `API_PORT` (8080, mapeado a `server.port` en
 `application.yml`), `DATA_DIR` (`./data/stories`), `AUDIO_DIR`
 (`./data/audio`), `CLIPS_DIR` (`./data/clips`), `CLIP_MAX_BYTES` (64 MiB),
 `CLIP_DOWNLOAD_TIMEOUT_SECONDS` (120), `CLIP_MIN_FREE_BYTES` (512 MiB),
-`CLAUDE_MODEL` (`claude-sonnet-5-5`) y las del generador
+`CLAUDE_MODEL` (`claude-sonnet-5-5`), las del video final (ver "Video
+final" arriba; deshabilitado por defecto) y las del generador
 de historias (ver "Generador de historias" arriba). Esto resuelve, de la forma más simple posible, el
 pendiente de "manejo de credenciales" — variables de entorno alcanzan para
 un piloto de una persona; un secret manager sería sobre-ingeniería hoy.
@@ -426,6 +515,16 @@ mvn test
   `FakeStoryDraftGenerator` (`@Primary`) y Higgsfield, ElevenLabs y el
   guionado de POST /stories como `@MockBean`, verificando con
   `verifyNoInteractions` que el flujo nuevo nunca los toca.
+- `video/`: el video final. `FinalVideoApiTest` recorre los endpoints por
+  HTTP real con un `FakeProcessRunner` (sin Node): flujo feliz, fallo y
+  timeout del proceso, cada precondición por separado, ids maliciosos, 409
+  por video existente y por render en curso, `force`, dos POST simultáneos y
+  la recuperación tras un reinicio. `FinalVideoDisabledApiTest` comprueba
+  que por defecto no existen las rutas. `SystemProcessRunnerTest` usa la
+  propia JVM como subproceso (código de salida, log, sin stdin y timeout que
+  mata también al hijo). `FinalVideoNodeContractTest` corre el
+  `make-video.mjs` real con la CLI de HyperFrames simulada (se omite si no
+  hay `node` en el PATH).
 
 ## Pendiente / próximos pasos
 

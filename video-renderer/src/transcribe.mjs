@@ -15,6 +15,7 @@
 //  - Con Parakeet el idioma se detecta solo (según el --help, --language solo aplica a Whisper).
 // No probado: ejecución en Linux/GCP, ni --dir contra una carpeta que ya sea un proyecto HyperFrames.
 import { spawn } from "node:child_process";
+import { createWriteStream } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -23,7 +24,7 @@ import { loadStory, buildTimeline } from "./story.mjs";
 
 export const DEFAULT_CLI_VERSION = "0.8.143"; // la última con la que se probó la transcripción
 export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000; // incluye una posible primera descarga de npm y del modelo
-const SAFE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+export const SAFE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 /** Comillas para cmd.exe (solo cuando se usa shell en Windows). */
 function quoteWin(arg) {
@@ -34,33 +35,57 @@ function quoteWin(arg) {
 /**
  * Ejecuta un comando sin entrada estándar y con tiempo máximo. Devuelve { exitCode, stdout, stderr, timedOut, ms }.
  * Se puede reemplazar en las pruebas (parámetro `runner`).
+ * `logFile` (opcional): además de lo acotado en memoria, toda la salida (stdout y stderr) se agrega a ese archivo.
+ * Al vencer el tiempo se mata el árbol completo: en Windows con taskkill /t; en Linux/macOS el hijo se lanza en su
+ * propio grupo de procesos (detached) y se manda SIGKILL al grupo, así no quedan huérfanos (por ejemplo los Chrome
+ * de hyperframes render). No probado en Linux en este repo.
  */
-export function runCommand(command, args, { cwd, env, timeoutMs }) {
+export function runCommand(command, args, { cwd, env, timeoutMs, logFile }) {
   return new Promise((resolvePromise) => {
     const started = Date.now();
     const win = process.platform === "win32";
+    const log = logFile ? createWriteStream(logFile, { flags: "a" }) : null;
+    log?.on("error", () => {}); // un log que no se puede escribir no debe tumbar la ejecución
     const child = win
       ? spawn([command, ...args].map(quoteWin).join(" "), { cwd, env, shell: true, stdio: ["ignore", "pipe", "pipe"], windowsHide: true })
-      : spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+      : spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let done = false;
     const cap = (s, chunk) => (s + chunk).slice(-200_000); // no acumular sin límite
-    child.stdout.on("data", (d) => (stdout = cap(stdout, d)));
-    child.stderr.on("data", (d) => (stderr = cap(stderr, d)));
+    child.stdout.on("data", (d) => {
+      stdout = cap(stdout, d);
+      log?.write(d);
+    });
+    child.stderr.on("data", (d) => {
+      stderr = cap(stderr, d);
+      log?.write(d);
+    });
     const timer = setTimeout(() => {
       timedOut = true;
-      if (win) spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" });
-      else child.kill("SIGKILL");
+      log?.write(`\n[runCommand] superó ${timeoutMs} ms: se mata el árbol de procesos\n`);
+      if (win) spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore", windowsHide: true });
+      else {
+        try {
+          process.kill(-child.pid, "SIGKILL"); // pid negativo = todo el grupo
+        } catch {
+          child.kill("SIGKILL");
+        }
+      }
     }, timeoutMs);
+    const finish = (result) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (log) log.end(() => resolvePromise(result));
+      else resolvePromise(result);
+    };
     child.on("error", (e) => {
-      clearTimeout(timer);
-      resolvePromise({ exitCode: -1, stdout, stderr: `${stderr}\n${e.message}`, timedOut, ms: Date.now() - started });
+      log?.write(`\n[runCommand] no se pudo ejecutar: ${e.message}\n`);
+      finish({ exitCode: -1, stdout, stderr: `${stderr}\n${e.message}`, timedOut, ms: Date.now() - started });
     });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      resolvePromise({ exitCode: code ?? -1, stdout, stderr, timedOut, ms: Date.now() - started });
-    });
+    child.on("close", (code) => finish({ exitCode: code ?? -1, stdout, stderr, timedOut, ms: Date.now() - started }));
   });
 }
 
@@ -104,20 +129,22 @@ const isInside = (parent, child) => {
 
 /**
  * Transcribe un audio en una carpeta temporal propia. No toca `outFile` si algo falla.
+ * `cliCommand` (opcional, para pruebas): reemplaza ["npx", "hyperframes@<versión>"] por otro comando equivalente.
  * Devuelve el registro de la escena para el reporte.
  */
-export async function transcribeScene({ sceneId, audioPath, outFile, cliVersion, language, engine, timeoutMs, runner = runCommand, workRoot, removeDir = defaultRemoveDir }) {
+export async function transcribeScene({ sceneId, audioPath, outFile, cliVersion, language, engine, timeoutMs, runner = runCommand, workRoot, removeDir = defaultRemoveDir, cliCommand }) {
   if (!SAFE_VERSION.test(cliVersion)) throw new Error(`Versión de la CLI inválida: ${JSON.stringify(cliVersion)}`);
   const work = await mkdtemp(join(workRoot ?? tmpdir(), `hf-transcribe-${sceneId}-`));
   let record;
   let cleanupWarning = null;
   try {
-    const args = ["hyperframes@" + cliVersion, "transcribe", resolve(audioPath), "--json", "--dir", work];
+    const [command, ...prefix] = cliCommand ?? ["npx", "hyperframes@" + cliVersion];
+    const args = [...prefix, "transcribe", resolve(audioPath), "--json", "--dir", work];
     if (language) args.push("--language", language);
     if (engine) args.push("--engine", engine);
     const env = { ...process.env, npm_config_yes: "true" }; // evita la pregunta interactiva de npx
     // cwd = el actual, NO la carpeta temporal: un proceso con esa carpeta como directorio de trabajo la bloquea en Windows.
-    const r = await runner("npx", args, { cwd: process.cwd(), env, timeoutMs });
+    const r = await runner(command, args, { cwd: process.cwd(), env, timeoutMs });
     const tail = (r.stderr || "").trim().split(/\r?\n/).slice(-3).join(" | ");
 
     if (r.timedOut) throw new Error(`${sceneId}: la transcripción superó ${Math.round(timeoutMs / 1000)} s y se canceló. ${tail}`);
@@ -171,6 +198,22 @@ export async function transcribeScene({ sceneId, audioPath, outFile, cliVersion,
   }
   if (cleanupWarning) record.cleanupWarning = cleanupWarning;
   return record;
+}
+
+/** Avisos de una escena ya transcrita (`scene` es la de buildTimeline: id y duration). */
+export function sceneWarnings(rec, scene, language) {
+  const warnings = [];
+  // En las 6 escenas de tunguska la "durationSeconds" de la CLI coincide EXACTAMENTE con el fin de la última palabra
+  // (múltiplo de 0.08 s), no con el largo del mp3: queda 0.07-0.29 s por debajo de targetDuration por el silencio final.
+  // Por eso solo es sospechoso que sea MAYOR que targetDuration (palabras que terminan después del audio).
+  if (Number.isFinite(rec.durationSeconds) && rec.durationSeconds > scene.duration + 0.15) {
+    warnings.push(`${scene.id}: la CLI ubica palabras hasta ${rec.durationSeconds} s pero targetDuration es ${scene.duration} s (más de 0.15 s después del final): ¿audio equivocado?`);
+  }
+  if (rec.detectedLanguage && language && rec.detectedLanguage !== language) {
+    warnings.push(`${scene.id}: idioma detectado "${rec.detectedLanguage}" distinto del pedido "${language}".`);
+  }
+  if (rec.cleanupWarning) warnings.push(`${scene.id}: ${rec.cleanupWarning}`);
+  return warnings;
 }
 
 const USAGE = `Uso: node src/transcribe.mjs --story <archivo|url> --assets <dir> --out <dir> [opciones]
@@ -244,16 +287,7 @@ export async function main(argv = process.argv.slice(2), runner = runCommand) {
       timeoutMs,
       runner,
     });
-    // En las 6 escenas de tunguska la "durationSeconds" de la CLI coincide EXACTAMENTE con el fin de la última palabra
-    // (múltiplo de 0.08 s), no con el largo del mp3: queda 0.07-0.29 s por debajo de targetDuration por el silencio final.
-    // Por eso solo es sospechoso que sea MAYOR que targetDuration (palabras que terminan después del audio).
-    if (Number.isFinite(rec.durationSeconds) && rec.durationSeconds > j.scene.duration + 0.15) {
-      warnings.push(`${j.scene.id}: la CLI ubica palabras hasta ${rec.durationSeconds} s pero targetDuration es ${j.scene.duration} s (más de 0.15 s después del final): ¿audio equivocado?`);
-    }
-    if (rec.detectedLanguage && language && rec.detectedLanguage !== language) {
-      warnings.push(`${j.scene.id}: idioma detectado "${rec.detectedLanguage}" distinto del pedido "${language}".`);
-    }
-    if (rec.cleanupWarning) warnings.push(`${j.scene.id}: ${rec.cleanupWarning}`);
+    warnings.push(...sceneWarnings(rec, j.scene, language));
     records.push(rec);
     console.log(`OK  ${j.scene.id}: ${rec.wordCount} palabras en ${(rec.ms / 1000).toFixed(1)} s (${rec.engine ?? "?"})`);
   }

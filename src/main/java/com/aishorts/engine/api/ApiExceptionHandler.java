@@ -1,6 +1,7 @@
 package com.aishorts.engine.api;
 
 import com.aishorts.engine.drafts.DraftException;
+import com.aishorts.engine.video.FinalVideoException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -26,6 +27,20 @@ class ApiExceptionHandler {
         body.put("error", e.getMessage());
         if (!e.violations().isEmpty()) {
             body.put("violations", e.violations());
+        }
+        return ResponseEntity.status(e.status()).body(body);
+    }
+
+    /** Video final: precondiciones (409/422 con el problema de cada escena) y render en curso (409 con su jobId). */
+    @ExceptionHandler(FinalVideoException.class)
+    ResponseEntity<Map<String, Object>> handleFinalVideoException(FinalVideoException e) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", e.getMessage());
+        if (!e.sceneProblems().isEmpty()) {
+            body.put("scenes", e.sceneProblems());
+        }
+        if (e.jobId() != null) {
+            body.put("jobId", e.jobId());
         }
         return ResponseEntity.status(e.status()).body(body);
     }

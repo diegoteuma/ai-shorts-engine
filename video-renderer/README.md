@@ -8,14 +8,15 @@ Vive **fuera del backend Java** a propósito: el backend termina cuando cada esc
 
 | Cosa | Estado |
 |---|---|
-| Reproduce **byte a byte** la composición validada, con las duraciones de referencia | Verificado (`npm test`, 43 pruebas, 0 fallos) |
+| Reproduce **byte a byte** la composición validada, con las duraciones de referencia | Verificado (`npm test`: 60 pruebas, 0 fallos; eran 42 antes de `make-video.mjs`, no 43 como decía acá) |
 | Con las duraciones del backend (ms) queda dentro de 2 ms de la validada | Verificado (prueba automatizada) |
 | Corrida real con los datos de `data/` (clips, audios, `tunguska.json`) | Verificado: genera el proyecto sin errores |
 | `npx hyperframes lint` sobre el proyecto generado (0.8.141) | Verificado: 0 errores, 1 aviso (`composition_file_too_large`, 1164 líneas, igual que la validada) |
 | `render` del proyecto generado | Lo corriste tú en Windows: compiló (720×1280, 37.431 s, 1123 fotogramas) y, tras corregir un problema con los mp3 de tu copia, terminó bien. **Pendiente de anotar:** qué lo corrigió y la revisión visual del MP4 |
-| `src/transcribe.mjs` (ASR por escena) | Probado con una CLI **simulada** (10 pruebas) y contra la CLI **real** solo en su ruta de fallo (sin red a huggingface.co: código 1 y `{"ok":false,"error":...}`). **El camino de éxito con Parakeet real no se ejecutó en este repo** |
-| Transcripciones reales vs. las de las pruebas | El agente de la prueba las comparó (6 escenas, CLI 0.8.141 vs 0.8.143): mismo texto y 0.0 ms de diferencia. Es un informe suyo, no lo reproduje |
-| El flag `--render` de este CLI | **No ejecutado** (solo revisado estáticamente) |
+| `src/transcribe.mjs` (ASR por escena) | Probado con una CLI **simulada** (10 pruebas) y contra la CLI **real** solo en su ruta de fallo (sin red a huggingface.co: código 1 y `{"ok":false,"error":...}`). El camino de éxito con Parakeet real se ejecutó **una vez** (Windows, 2026-10-12, dentro de `make-video.mjs`): 6 escenas en 76 s (46.7 s la primera, 5.6-6.2 s las demás). **En la VM no se midió** |
+| Transcripciones reales vs. las de las pruebas | Reproducido el 2026-10-12 con `compare-transcripts` (CLI 0.8.143, Windows): mismas palabras y 0.0 ms de desfase; difieren solo puntuación y mayúsculas en 2 escenas ("Rusia:" vs "Rusia.") |
+| El flag `--render` de `generate.mjs` | **No ejecutado** (solo revisado estáticamente). No usarlo: no fija versión, ni workers, ni timeout. Para renderizar usar `make-video.mjs` |
+| `src/make-video.mjs` (todo en un comando) | Probado con CLI y ffprobe **simulados** (18 pruebas). Corrida **real** una vez en Windows con tunguska: COMPLETED en 3 min 10 s (transcribe 76 s, check 47 s, render 61 s), MP4 720×1280 con audio de 37.433 s. **En Linux/VM no se ejecutó** (ni symlinks ni la muerte del grupo de procesos) |
 | Segunda historia distinta de "tunguska" | **No probado** |
 | Ejecución en GCP | **No probado** |
 
@@ -50,6 +51,29 @@ npx hyperframes render --output final.mp4 --quality standard
 Salida en `--out`: `index.html`, `assets/`, `fonts/Montserrat-800.woff2`, `words.global.json` y `generation-report.json` (duraciones usadas, alineación por escena, grupos de subtítulos, comprobaciones de medios y avisos). **Leer los avisos**: informan, por ejemplo, las palabras con tiempo inferido.
 
 Opciones: `--numerals auto|off`, `--title`, `--width/--height` (por defecto 720×1280), `--gsap-src`, `--min-word-sec` (alarga el resaltado de palabras muy cortas; por defecto 0 = comportamiento validado), `--max-inferred-ratio`, `--no-check-media`, `--force`, `--render`.
+
+## Video final en un comando (`src/make-video.mjs`)
+
+Es lo que lanza el backend (`POST /stories/{id}/final-video`); también se puede correr a mano:
+
+```bash
+node src/make-video.mjs --story tunguska.json --clips-dir ../data/clips --audio-dir ../data/audio --work ../data/renders/tunguska/work
+```
+
+`--clips-dir` y `--audio-dir` son carpetas **planas** (`<idEscena>.mp4` / `<idEscena>.mp3`, como `CLIPS_DIR` y `AUDIO_DIR` del backend). `--work` tiene que no existir o estar vacía (nunca borra nada que no haya creado). Etapas, cada una con su log completo en `work/logs/<etapa>.log` y una línea `ETAPA <nombre> INICIO|FIN` por stdout:
+
+1. **prepare**: valida la historia (ids, duraciones) y que estén **todos** los clips y audios (falla antes de gastar tiempo, con los ids que faltan), que haya `ffprobe`, y arma `work/input/{clips,audio}` con symlinks (copia si el sistema no deja: en Windows sin modo desarrollador da EPERM y copia; observado).
+2. **transcribe**: `transcribeScene` de `transcribe.mjs` por escena (timeout por escena, por defecto 600 s).
+3. **generate**: `generate.mjs --force` como proceso hijo, con `--out` = la carpeta de trabajo. Ojo: `generate.mjs` **copia** los medios a `work/assets/`, así que el symlink solo evita la copia intermedia; mientras corre hay una copia de los clips por historia (~55 MiB para tunguska).
+4. **lint** y 5. **check**: `npx hyperframes@0.8.143 lint|check --json`. Observado con 0.8.143: devuelven 0 con solo avisos (y con hallazgos "info", como los `content_overlap` de `check`) y 1 con errores. Falla la etapa solo con código ≠ 0 u `ok: false`; los avisos (`severity: "warning"`) se juntan en `warnings`.
+6. **render**: `npx hyperframes@0.8.143 render --output final.mp4 --quality standard --workers 1` (los tres flags figuran en `render --help` de 0.8.143). Timeout por defecto 1800 s.
+7. **validate**: `ffprobe` del MP4: 720×1280, stream de video y de audio, y duración igual a la suma de `targetDuration` ± 0.25 s.
+
+Resultado en `work/make-video-result.json` (se reescribe de forma atómica en cada transición; mientras corre, `status: "RUNNING"` y `stage` = la etapa en curso): `status` (RUNNING, COMPLETED, FAILED), `stage`, `error`, `stages` (nombre, ms, código de salida, `timedOut`; `transcribe` trae además el tiempo de cada escena), `warnings` (`{stage, message}`), `output`, `outputCheck`, `assetMode` (symlink/copy) y `versions`. Códigos de salida: 0 ok, 1 falló una etapa, 2 uso incorrecto.
+
+Al vencer un timeout se mata el árbol completo: `taskkill /t` en Windows (probado: muere también el nieto); en Linux el hijo va en su propio grupo de procesos y se le manda SIGKILL al grupo (**no probado en Linux**). Al terminar bien se borran `input/`, `assets/` y `fonts/` (queda `final.mp4`, los reportes, `index.html`, `words.global.json`, `transcripts/` y `logs/`); si falla, solo los medios. `--keep-work` no borra nada.
+
+Para pruebas: `--hyperframes-cmd '["node","test/support/fake-hyperframes.mjs"]'` y `--ffprobe-cmd` (o las variables `MAKE_VIDEO_HYPERFRAMES_CMD` / `MAKE_VIDEO_FFPROBE_CMD`: desde Java en Windows un JSON como argumento llega sin comillas). Timeouts: `--transcribe-timeout-sec`, `--generate-timeout-sec`, `--lint-timeout-sec`, `--check-timeout-sec`, `--render-timeout-sec`.
 
 ## Transcripciones (`src/transcribe.mjs`)
 

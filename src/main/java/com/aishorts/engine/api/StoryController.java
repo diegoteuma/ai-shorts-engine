@@ -8,6 +8,7 @@ import com.aishorts.engine.clips.ClipStore;
 import com.aishorts.engine.clips.ClipSyncResult;
 import com.aishorts.engine.difficulty.DifficultyFactors;
 import com.aishorts.engine.domain.Story;
+import com.aishorts.engine.domain.StoryIds;
 import com.aishorts.engine.drafts.StoryIndex;
 import com.aishorts.engine.persistence.SnapshotMapper;
 import com.aishorts.engine.persistence.StoryRepository;
@@ -105,6 +106,7 @@ public class StoryController {
         Map<String, Object> requestBody = body != null ? body : Map.of();
         StoryBrief brief = RequestParsing.parseStoryBrief(requestBody);
         String storyId = requestBody.get("storyId") != null ? String.valueOf(requestBody.get("storyId")) : UUID.randomUUID().toString();
+        StoryIds.requireValid(storyId); // 400: el id termina en nombres de archivo (historia, audios, clips)
         if (repository.findById(storyId).isPresent()) {
             throw new ApiError(409, "Ya existe una historia con id '" + storyId + "'.");
         }

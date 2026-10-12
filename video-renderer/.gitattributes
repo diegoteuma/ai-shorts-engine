@@ -1,0 +1,5 @@
+# La plantilla y el golden se comparan byte a byte con lo que genera el código
+# (que usa "\n"). Con core.autocrlf=true (default de Git para Windows) se
+# extraían con CRLF y las pruebas golden fallaban. Se fijan en LF.
+template/** text eol=lf
+test/fixtures/expected/** text eol=lf
