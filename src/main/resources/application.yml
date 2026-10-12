@@ -33,6 +33,29 @@ engine:
   # Copia local de los clips de Higgsfield (se guardan cuando poll-generation deja
   # TODAS las escenas COMPLETED). El directorio se crea al descargar el primer clip.
   clips-dir: ${CLIPS_DIR:./data/clips}
+  # Video final (POST /stories/{id}/final-video): lanza node video-renderer/src/make-video.mjs
+  # (transcripción + composición + render con HyperFrames 0.8.143), un render a la vez.
+  # DESHABILITADO por defecto: la API no tiene autenticación y esto lanza procesos
+  # pesados; con false no existen ni el servicio ni las rutas. No exponer a internet.
+  final-video:
+    enabled: ${FINAL_VIDEO_ENABLED:false}
+    # RENDERS_DIR/<idHistoria>/{job.json, final.mp4, job-<idTrabajo>/}
+    renders-dir: ${RENDERS_DIR:./data/renders}
+    renderer-dir: ${VIDEO_RENDERER_DIR:./video-renderer}
+    node-command: ${NODE_COMMAND:node}
+    # Disco libre mínimo para arrancar. SUPOSICIÓN sin medir: el render de tunguska
+    # dejó un MP4 de 39 MB y la carpeta de trabajo copia los clips (~55 MiB) mientras corre.
+    min-free-bytes: ${FINAL_VIDEO_MIN_FREE_BYTES:1073741824}
+    # true: no borrar assets ni copias de la carpeta de trabajo (para depurar).
+    keep-work-dir: ${FINAL_VIDEO_KEEP_WORK:false}
+    # Segundos. Valores iniciales SIN MEDIR en la VM, salvo el render (1014 s medidos
+    # para tunguska con --workers 1; 1800 deja margen). Transcripción: por escena.
+    timeouts:
+      transcribe-scene-seconds: ${FINAL_VIDEO_TRANSCRIBE_TIMEOUT_SECONDS:600}
+      generate-seconds: ${FINAL_VIDEO_GENERATE_TIMEOUT_SECONDS:120}
+      lint-seconds: ${FINAL_VIDEO_LINT_TIMEOUT_SECONDS:120}
+      check-seconds: ${FINAL_VIDEO_CHECK_TIMEOUT_SECONDS:300}
+      render-seconds: ${FINAL_VIDEO_RENDER_TIMEOUT_SECONDS:1800}
 
 # Límites de la descarga de clips. max-bytes es por clip (los 6 clips reales de
 # tunguska pesan entre 3.0 y 16.2 MB); el timeout es el total por clip, no por
