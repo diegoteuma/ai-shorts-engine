@@ -51,8 +51,9 @@ public class DraftsConfiguration {
     }
 
     @Bean
-    StoryDraftGenerator storyDraftGenerator(ClaudeConfig claudeConfig, ObjectMapper objectMapper, DraftsProperties properties) {
-        return ClaudeStoryDraftGenerator.create(claudeConfig, objectMapper, properties);
+    StoryDraftGenerator storyDraftGenerator(ClaudeConfig claudeConfig, DraftsProperties properties) {
+        // Spring llama a close() al apagar (método de destrucción inferido): cierra el cliente HTTP.
+        return ClaudeStoryDraftGenerator.create(claudeConfig, properties);
     }
 
     @Bean

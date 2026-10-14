@@ -48,8 +48,11 @@ class ClaudeStoryDraftGeneratorTest {
 
     @AfterEach
     void stopServer() {
+        created.forEach(ClaudeStoryDraftGenerator::close);
         server.stop(0);
     }
+
+    private final List<ClaudeStoryDraftGenerator> created = new ArrayList<>();
 
     private ClaudeStoryDraftGenerator generator() {
         return generator(DraftFixtures.properties());
@@ -58,7 +61,9 @@ class ClaudeStoryDraftGeneratorTest {
     private ClaudeStoryDraftGenerator generator(DraftsProperties properties) {
         ClaudeConfig config = new ClaudeConfig("test-key", "test-model", "http://127.0.0.1:" + server.getAddress().getPort(), 16000);
         // la misma fábrica que usa DraftsConfiguration en producción
-        return ClaudeStoryDraftGenerator.create(config, objectMapper, properties);
+        ClaudeStoryDraftGenerator generator = ClaudeStoryDraftGenerator.create(config, properties);
+        created.add(generator);
+        return generator;
     }
 
     private void respond(int status, String body) {
@@ -71,16 +76,19 @@ class ClaudeStoryDraftGeneratorTest {
     }
 
     @Test
-    void pauseTurn_resendsAssistantBlocksIntact_andCollectsUrlsAndUsage() {
-        respond(200, """
+    @SuppressWarnings("unchecked")
+    void pauseTurn_resendsAssistantBlocksIntact_andCollectsUrlsAndUsage() throws IOException {
+        // "campo_futuro": un campo que el SDK no modela también tiene que volver tal cual.
+        String firstResponse = """
                 {"stop_reason":"pause_turn","container":{"id":"cont_1"},
                  "usage":{"input_tokens":100,"output_tokens":10,"server_tool_use":{"web_search_requests":1}},
                  "content":[
                   {"type":"text","text":"Voy a buscar. "},
-                  {"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"tunguska"}},
+                  {"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"tunguska"},"campo_futuro":"F1"},
                   {"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[
-                    {"type":"web_search_result","url":"https://science.nasa.gov/a","title":"A","encrypted_content":"ENC-AAA","page_age":null}]}
-                 ]}""");
+                    {"type":"web_search_result","url":"https://science.nasa.gov/a","title":"A","encrypted_content":"ENC-AAA","page_age":null,"campo_futuro":"F2"}]}
+                 ]}""";
+        respond(200, firstResponse);
         respond(200, """
                 {"stop_reason":"end_turn",
                  "usage":{"input_tokens":200,"output_tokens":50,"server_tool_use":{"web_search_requests":2}},
@@ -108,8 +116,33 @@ class ClaudeStoryDraftGeneratorTest {
         List<Map<String, Object>> messages = (List<Map<String, Object>>) continuation.get("messages");
         assertThat(messages).hasSize(2);
         assertThat(messages.get(1).get("role")).isEqualTo("assistant");
-        String resent = messages.get(1).get("content").toString();
-        assertThat(resent).contains("ENC-AAA").contains("srvtoolu_1").contains("Voy a buscar.");
+        // Cada bloque vuelve con TODOS sus campos y valores originales (anidados incluidos).
+        List<Object> original = (List<Object>) objectMapper.readValue(firstResponse, Map.class).get("content");
+        List<Object> resent = (List<Object>) messages.get(1).get("content");
+        assertThat(resent).hasSameSizeAs(original);
+        for (int i = 0; i < original.size(); i++) {
+            assertKeptIntact(original.get(i), resent.get(i), "content[" + i + "]");
+        }
+    }
+
+    /** Todo lo que trae {@code original} está en {@code resent} con el mismo valor (puede haber campos de más). */
+    private static void assertKeptIntact(Object original, Object resent, String path) {
+        if (original instanceof Map<?, ?> o) {
+            assertThat(resent).as(path).isInstanceOf(Map.class);
+            Map<?, ?> r = (Map<?, ?>) resent;
+            for (Map.Entry<?, ?> e : o.entrySet()) {
+                assertThat(r.containsKey(e.getKey())).as(path + "." + e.getKey() + " falta").isTrue();
+                assertKeptIntact(e.getValue(), r.get(e.getKey()), path + "." + e.getKey());
+            }
+        } else if (original instanceof List<?> o) {
+            assertThat(resent).as(path).isInstanceOf(List.class);
+            assertThat((List<?>) resent).as(path).hasSameSizeAs(o);
+            for (int i = 0; i < o.size(); i++) {
+                assertKeptIntact(o.get(i), ((List<?>) resent).get(i), path + "[" + i + "]");
+            }
+        } else {
+            assertThat(resent).as(path).isEqualTo(original);
+        }
     }
 
     @Test
@@ -235,10 +268,22 @@ class ClaudeStoryDraftGeneratorTest {
         respond(200, "{\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"{}\"}]}");
         generator().generate(draftRequest());
         assertThat(receivedUpgradeHeaders).containsExactly("(ninguno)");
+        assertThat(receivedProtocols).containsExactly("HTTP/1.1");
+    }
+
+    @Test
+    void requestsCarryTheApiKeyAndApiVersion_throughTheReplacedTransport() {
+        respond(200, "{\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"{}\"}]}");
+        generator().generate(draftRequest());
+        assertThat(receivedApiKeys).containsExactly(List.of("test-key"));
+        assertThat(receivedApiVersions).containsExactly("2023-06-01");
     }
 
     private static final int DROP_CONNECTION = -1;
     private final List<String> receivedUpgradeHeaders = new ArrayList<>();
+    private final List<String> receivedProtocols = new ArrayList<>();
+    private final List<List<String>> receivedApiKeys = new ArrayList<>();
+    private final List<String> receivedApiVersions = new ArrayList<>();
 
     @SuppressWarnings("unchecked")
     private void route(HttpExchange exchange) throws IOException {
@@ -247,6 +292,9 @@ class ClaudeStoryDraftGeneratorTest {
             receivedRequests.add(objectMapper.readValue(requestBody, Map.class));
             String upgrade = exchange.getRequestHeaders().getFirst("Upgrade");
             receivedUpgradeHeaders.add(upgrade != null ? upgrade : "(ninguno)");
+            receivedProtocols.add(exchange.getProtocol());
+            receivedApiKeys.add(exchange.getRequestHeaders().getOrDefault("x-api-key", List.of()));
+            receivedApiVersions.add(exchange.getRequestHeaders().getFirst("anthropic-version"));
             int[] status = statuses.poll();
             String body = bodies.poll();
             if (status != null && status[0] == DROP_CONNECTION) {

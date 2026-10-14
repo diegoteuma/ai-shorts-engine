@@ -22,6 +22,7 @@ import com.aishorts.engine.tts.TtsConfig;
 import com.aishorts.engine.tts.TtsService;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
@@ -93,8 +94,9 @@ public class EngineConfiguration {
     }
 
     @Bean
-    ScriptDraftingService scriptDraftingService(ClaudeConfig config, ObjectMapper objectMapper) {
-        return new ClaudeScriptDraftingService(config, objectMapper);
+    ScriptDraftingService scriptDraftingService(ChatClient.Builder chatClientBuilder) {
+        // ChatClient.Builder lo arma Spring AI con spring.ai.anthropic.* (ver application.yml).
+        return new ClaudeScriptDraftingService(chatClientBuilder.build());
     }
 
     @Bean

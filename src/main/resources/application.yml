@@ -4,6 +4,24 @@ server:
 spring:
   application:
     name: ai-shorts-engine
+  # Spring AI (ChatClient): hoy solo lo usa el guionado (ClaudeScriptDraftingService).
+  # Misma clave y modelo que claude.* de abajo; el generador de historias (drafts)
+  # usa el SDK oficial anthropic-java (ClaudeStreamingClient), no Spring AI.
+  ai:
+    anthropic:
+      api-key: ${CLAUDE_API_KEY}
+      chat:
+        options:
+          model: ${CLAUDE_MODEL:claude-sonnet-5-5}
+          # Los defaults de Spring AI 1.1.8 son max-tokens 500 (cortaría el JSON de 6
+          # escenas) y temperature 0.8. Se fijan los del cliente anterior: 16000 (de
+          # ClaudeConfig.of) y 1.0 (el default de la API, que es lo que aplicaba al no mandarla).
+          max-tokens: 16000
+          temperature: 1.0
+    retry:
+      # Sin reintentos, como el cliente anterior. El default de Spring AI es 10 intentos
+      # con backoff exponencial (2 s x5, hasta minutos), y POST /stories espera en línea.
+      max-attempts: 1
 
 # Todo lo que EngineConfiguration lee con @Value, documentado en un solo
 # lugar. Cada valor delega a una variable de entorno de nombre distinto
@@ -102,7 +120,8 @@ app:
       max-uses-proposals: ${CLAUDE_WEB_SEARCH_MAX_USES_PROPOSALS:3}
     # Las llamadas van con streaming: este es el tiempo máximo SIN recibir
     # ningún evento (ni ping) y el de espera de los headers. No limita la
-    # duración total mientras Claude siga mandando eventos.
+    # duración total mientras Claude siga mandando eventos. Es el readTimeout
+    # de OkHttp en Http11OkHttpClient (callTimeout en 0).
     read-timeout-seconds: ${CLAUDE_READ_TIMEOUT_SECONDS:180}
     max-pause-continuations: 5
     words-per-second: 2.65
