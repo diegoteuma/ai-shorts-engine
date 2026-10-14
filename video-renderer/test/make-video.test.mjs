@@ -248,6 +248,21 @@ test("make-video: --keep-work conserva los assets", async () => {
   await rm(s.root, { recursive: true, force: true });
 });
 
+test("make-video: --skip-check no llama a check, lo deja en stages como omitido y sigue con render", async () => {
+  const s = await setup();
+  // un check que fallaría si se corriera: con --skip-check no debe importar
+  const r = await runMakeVideo(s, { hf: { exit: { check: 1 }, check: { ok: false } }, extra: ["--skip-check"] });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.result.status, "COMPLETED");
+  assert.deepEqual(r.result.stages.map((x) => x.name), STAGES);
+  assert.deepEqual(r.result.stages.find((x) => x.name === "check"), { name: "check", ms: 0, exitCode: null, skipped: true });
+  assert.ok(r.result.stages.filter((x) => x.name !== "check").every((x) => x.exitCode === 0 && !x.skipped));
+  assert.deepEqual((await hfCalls(s)).map((a) => a[0]).slice(-2), ["lint", "render"]);
+  assert.ok(!(await exists(join(s.work, "logs", "check.log"))));
+  assert.match(r.stdout, /^ETAPA check OMITIDA$/m);
+  await rm(s.root, { recursive: true, force: true });
+});
+
 test("make-video: uso incorrecto -> código 2; una carpeta de trabajo con contenido no se toca", async () => {
   const s = await setup();
   await mkdir(s.work);

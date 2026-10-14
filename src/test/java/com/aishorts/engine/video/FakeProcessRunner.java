@@ -57,31 +57,32 @@ public final class FakeProcessRunner implements ProcessRunner {
             return new Result(0, false);
         }
         Path work = Path.of(command.get(command.indexOf("--work") + 1));
+        boolean skipCheck = command.contains("--skip-check");
         try {
             Files.createDirectories(work.resolve("logs"));
             Files.writeString(logFile, "salida simulada de make-video\n", StandardCharsets.UTF_8);
             switch (mode) {
                 case SUCCESS -> {
-                    return succeed(work);
+                    return succeed(work, skipCheck);
                 }
                 case FAIL -> {
                     int upTo = STAGES.indexOf(failStage);
                     Files.writeString(work.resolve("logs").resolve(failStage + ".log"),
                             "x".repeat(6000) + "\ndetalle del fallo en " + failStage + "\n", StandardCharsets.UTF_8);
-                    writeResult(work, "FAILED", failStage, failStage + " encontró errores (código 1): simulado", upTo, 1);
+                    writeResult(work, "FAILED", failStage, failStage + " encontró errores (código 1): simulado", upTo, 1, skipCheck);
                     return new Result(1, false);
                 }
                 case TIMEOUT -> {
-                    writeResult(work, "RUNNING", "render", null, STAGES.indexOf("render"), null);
+                    writeResult(work, "RUNNING", "render", null, STAGES.indexOf("render"), null, skipCheck);
                     return new Result(-1, true);
                 }
                 case BLOCK -> {
-                    writeResult(work, "RUNNING", "render", null, STAGES.indexOf("render"), null);
+                    writeResult(work, "RUNNING", "render", null, STAGES.indexOf("render"), null, skipCheck);
                     started.countDown();
                     if (!release.await(30, TimeUnit.SECONDS)) {
                         throw new IllegalStateException("el test nunca liberó el render simulado");
                     }
-                    return succeed(work);
+                    return succeed(work, skipCheck);
                 }
                 default -> throw new IllegalStateException(mode.name());
             }
@@ -93,17 +94,26 @@ public final class FakeProcessRunner implements ProcessRunner {
         }
     }
 
-    private Result succeed(Path work) throws IOException {
+    private Result succeed(Path work, boolean skipCheck) throws IOException {
         Files.write(work.resolve("final.mp4"), video);
-        writeResult(work, "COMPLETED", null, null, STAGES.size(), null);
+        writeResult(work, "COMPLETED", null, null, STAGES.size(), null, skipCheck);
         return new Result(0, false);
     }
 
-    /** Como make-video: `stages` trae las terminadas; si hay {@code failedExit}, la última es la que falló. */
-    private static void writeResult(Path work, String status, String stage, String error, int stagesDone, Integer failedExit) throws IOException {
+    /**
+     * Como make-video: `stages` trae las terminadas; si hay {@code failedExit}, la última es la que falló.
+     * Con --skip-check, check queda como {@code {"ms":0,"exitCode":null,"skipped":true}}.
+     */
+    private static void writeResult(Path work, String status, String stage, String error, int stagesDone, Integer failedExit,
+                                    boolean skipCheck) throws IOException {
         StringBuilder stages = new StringBuilder();
         for (int i = 0; i < stagesDone; i++) {
-            stages.append(i > 0 ? "," : "").append("{\"name\":\"").append(STAGES.get(i)).append("\",\"ms\":").append(10 + i).append(",\"exitCode\":0}");
+            stages.append(i > 0 ? "," : "").append("{\"name\":\"").append(STAGES.get(i)).append("\"");
+            if (skipCheck && STAGES.get(i).equals("check")) {
+                stages.append(",\"ms\":0,\"exitCode\":null,\"skipped\":true}");
+            } else {
+                stages.append(",\"ms\":").append(10 + i).append(",\"exitCode\":0}");
+            }
         }
         if (failedExit != null) {
             stages.append(stagesDone > 0 ? "," : "").append("{\"name\":\"").append(stage).append("\",\"ms\":5,\"exitCode\":").append(failedExit).append("}");
