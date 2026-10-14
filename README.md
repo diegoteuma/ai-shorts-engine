@@ -30,6 +30,14 @@ ya no existe), Tomcat embebido y Spring MVC. El wiring de beans vive en
 `com.aishorts.engine.config.EngineConfiguration`; el punto de entrada es
 `com.aishorts.engine.AiShortsEngineApplication`.
 
+Spring Boot 3.5 + Spring AI 1.1 (la línea de Spring AI para Boot 3.4/3.5; la
+2.x exige Boot 4 y Jackson 3). Spring AI (`ChatClient`) solo lo usa el
+guionado de escenas (`script/`); se configura en `spring.ai.anthropic.*` de
+`application.yml`, con la misma `CLAUDE_API_KEY` y `CLAUDE_MODEL`. Ahí se fijan
+`max-tokens: 16000`, `temperature: 1.0` y `spring.ai.retry.max-attempts: 1`,
+porque los defaults de Spring AI 1.1.8 (500 tokens, 0.8 y 10 reintentos con
+backoff) cambiarían el comportamiento.
+
 ## Estructura
 
 ```
@@ -56,10 +64,10 @@ com.aishorts.engine
 │                   STANDARD o PREMIUM. Es solo una sugerencia — la decisión
 │                   final es tuya, en la puerta de aprobación de prompts.
 │
-├── claude/         ClaudeMessagesClient: cliente HTTP de bajo nivel para la
-│                   Messages API de Claude, usado por script/ (sendMessage,
-│                   solo texto) y por drafts/ (createMessage: body completo
-│                   con tools y bloques crudos, con timeout de lectura).
+├── claude/         ClaudeStreamingClient: la Messages API con streaming
+│                   vía el SDK oficial (anthropic-java), usado solo por
+│                   drafts/. Http11OkHttpClient es su transporte: OkHttp
+│                   solo HTTP/1.1, con timeout por inactividad.
 │                   ClaudeConfig guarda apiKey/model/baseUrl.
 │
 ├── drafts/         Generador de historias, el paso PREVIO al pipeline:
@@ -80,9 +88,10 @@ com.aishorts.engine
 ├── script/         StoryBrief (lo que vos ya aprobaste: tema, título,
 │                   hechos núcleo, restricciones editoriales, presupuesto de
 │                   duración) → ScriptDraftingService → 6 SceneDraft.
-│                   ClaudeScriptDraftingService le pide a Claude un array
-│                   JSON de 6 escenas en el orden GANCHO..CIERRE y lo
-│                   parsea de forma estricta. StoryDraftingService arma el
+│                   ClaudeScriptDraftingService le pide a Claude (vía Spring
+│                   AI ChatClient) un array JSON de 6 escenas en el orden
+│                   GANCHO..CIERRE, con el esquema de BeanOutputConverter, y
+│                   lo valida de forma estricta. StoryDraftingService arma el
 │                   Story final con las duraciones ya calculadas.
 │
 ├── higgsfield/     HiggsfieldClient (interfaz) y HiggsfieldRestClient (la
@@ -182,12 +191,17 @@ POST /story-drafts/{id}/decision    PUERTA 0: {decision: APPROVE|REJECT, note?, 
   (modo, fecha de hoy, búsqueda web, `existingStories` de `data/stories` y
   de los borradores no rechazados).
 - **Streaming**: las llamadas al generador usan `"stream": true` (SSE) sobre
-  HTTP/1.1. Una llamada con búsqueda web tarda minutos y, sin streaming, la
-  conexión queda sin tráfico; en una red con inspección TLS se observó que
-  la cortaban (`Connection reset`). Con streaming llegan eventos y pings
-  mientras Claude trabaja. Si estás detrás de inspección TLS, Java además
-  necesita confiar en la CA corporativa: arrancá con
-  `-Djavax.net.ssl.trustStoreType=Windows-ROOT`.
+  HTTP/1.1, con el SDK oficial `anthropic-java` (2.71.0). Una llamada con
+  búsqueda web tarda minutos y, sin streaming, la conexión queda sin
+  tráfico; en una red con inspección TLS se observó que la cortaban
+  (`Connection reset`). Con streaming llegan eventos y pings mientras Claude
+  trabaja. El builder del SDK no deja forzar HTTP/1.1, así que el transporte
+  es un OkHttp propio (`Http11OkHttpClient`, enchufado con un `Interceptor`
+  del SDK) que también pone el timeout de inactividad. Sin reintentos
+  (`maxRetries(0)`), como antes. Si estás detrás de inspección TLS, Java
+  además necesita confiar en la CA corporativa: arrancá con
+  `-Djavax.net.ssl.trustStoreType=Windows-ROOT` (OkHttp usa el truststore
+  por defecto de Java, así que la opción sigue aplicando).
 - **Borrador**: una pasada con búsqueda web (maneja `pause_turn` reenviando
   los bloques intactos) → JSON del primer `{` al último `}` → normalización →
   validación. Si hay violaciones **duras**, UN reintento sin herramientas con

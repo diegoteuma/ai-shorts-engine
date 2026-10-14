@@ -1,24 +1,33 @@
 package com.aishorts.engine.script;
 
-import com.aishorts.engine.claude.ClaudeApiException;
-import com.aishorts.engine.claude.ClaudeConfig;
-import com.aishorts.engine.claude.ClaudeMessagesClient;
 import com.aishorts.engine.domain.SceneRole;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.core.ParameterizedTypeReference;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Llama a la API de Claude (vía ClaudeMessagesClient) para redactar el
- * borrador de las 6 escenas.
+ * Llama a Claude (vía Spring AI ChatClient) para redactar el borrador de las
+ * 6 escenas.
  *
  * El modelo debe responder SOLO con un array JSON de 6 objetos; el parseo es
  * estricto a propósito (falla con ScriptDraftingException, no intenta
  * adivinar) porque un guion mal formado no debería llegar silenciosamente
  * incompleto a tu revisión en la puerta 1.
+ *
+ * No se usa {@code .call().entity(...)}: si el JSON no parsea, esa vía tira
+ * un RuntimeException sin el texto crudo. Acá se toma el texto de la
+ * respuesta y se convierte con el mismo BeanOutputConverter (que también
+ * limpia un bloque de código markdown), para poder mostrarlo.
  */
 public final class ClaudeScriptDraftingService implements ScriptDraftingService {
 
@@ -27,39 +36,66 @@ public final class ClaudeScriptDraftingService implements ScriptDraftingService 
             SceneRole.GIRO, SceneRole.CONSECUENCIA, SceneRole.CIERRE
     };
 
-    private final ClaudeMessagesClient client;
-    private final ObjectMapper objectMapper;
+    /** Forma cruda de cada escena; el rol queda como texto para validarlo (y avisar bien) más abajo. */
+    record SceneJson(String role, String narrationText, String visualPrompt) {
+    }
 
-    public ClaudeScriptDraftingService(ClaudeConfig config, ObjectMapper objectMapper) {
-        this.client = new ClaudeMessagesClient(config, objectMapper);
-        this.objectMapper = objectMapper;
+    private final ChatClient chatClient;
+    private final BeanOutputConverter<List<SceneJson>> converter =
+            new BeanOutputConverter<>(new ParameterizedTypeReference<>() {});
+
+    public ClaudeScriptDraftingService(ChatClient chatClient) {
+        this.chatClient = chatClient;
     }
 
     @Override
     public List<SceneDraft> draftScenes(StoryBrief brief) throws ScriptDraftingException {
-        String systemPrompt = buildSystemPrompt(brief);
-        String userMessage = buildUserMessage(brief);
+        // Mensajes ya armados (no plantillas): los hechos del brief pueden traer llaves "{...}".
+        Prompt prompt = new Prompt(List.of(
+                new SystemMessage(buildSystemPrompt(brief)),
+                new UserMessage(buildUserMessage(brief) + "\n\n" + converter.getFormat())));
 
-        String rawText;
+        ChatResponse response;
         try {
-            rawText = client.sendMessage(systemPrompt, userMessage);
-        } catch (ClaudeApiException e) {
+            response = chatClient.prompt(prompt).call().chatResponse();
+        } catch (RuntimeException e) {
             throw new ScriptDraftingException("Error llamando a la API de Claude para el guion: " + e.getMessage(), e);
         }
-        return parseScenes(rawText, brief);
+        String rawText = firstTextOf(response);
+        if (rawText == null || rawText.isBlank()) {
+            throw new ScriptDraftingException("Claude no devolvió texto para el guion.");
+        }
+        return parseScenes(rawText);
     }
 
-    @SuppressWarnings("unchecked")
-    private List<SceneDraft> parseScenes(String rawText, StoryBrief brief) {
-        String jsonText = ClaudeMessagesClient.stripMarkdownFence(rawText.trim());
-        Object parsed;
-        try {
-            parsed = objectMapper.readValue(jsonText, Object.class);
-        } catch (JsonProcessingException e) {
-            throw new ScriptDraftingException(
-                    "No se pudo parsear el guion devuelto por Claude como JSON. Texto crudo:\n" + rawText, e);
+    /**
+     * El texto del primer bloque "text". No sirve {@code content()}: Spring AI 1.1.8 convierte cada bloque
+     * en una Generation y content() devuelve la primera, que con razonamiento extendido es el "thinking".
+     * Los bloques thinking traen "signature" en la metadata y los redacted_thinking traen "data".
+     */
+    private static String firstTextOf(ChatResponse response) {
+        if (response == null) {
+            return null;
         }
-        if (!(parsed instanceof List<?> list)) {
+        for (Generation generation : response.getResults()) {
+            AssistantMessage output = generation.getOutput();
+            Map<String, Object> metadata = output.getMetadata();
+            if (!metadata.containsKey("signature") && !metadata.containsKey("data") && output.getText() != null) {
+                return output.getText();
+            }
+        }
+        return null;
+    }
+
+    private List<SceneDraft> parseScenes(String rawText) {
+        List<SceneJson> list;
+        try {
+            list = converter.convert(rawText);
+        } catch (RuntimeException e) {
+            throw new ScriptDraftingException(
+                    "No se pudo parsear el guion devuelto por Claude como un array JSON de escenas. Texto crudo:\n" + rawText, e);
+        }
+        if (list == null) {
             throw new ScriptDraftingException("Se esperaba un array JSON de escenas. Texto crudo:\n" + rawText);
         }
         if (list.size() != EXPECTED_ORDER.length) {
@@ -70,8 +106,11 @@ public final class ClaudeScriptDraftingService implements ScriptDraftingService 
 
         List<SceneDraft> drafts = new ArrayList<>();
         for (int i = 0; i < list.size(); i++) {
-            Map<String, Object> entry = (Map<String, Object>) list.get(i);
-            String roleText = String.valueOf(entry.get("role"));
+            SceneJson entry = list.get(i);
+            if (entry == null) {
+                throw new ScriptDraftingException("La escena en la posición " + i + " es null. Texto crudo:\n" + rawText);
+            }
+            String roleText = String.valueOf(entry.role());
             SceneRole role;
             try {
                 role = SceneRole.valueOf(roleText.trim().toUpperCase());
@@ -83,8 +122,8 @@ public final class ClaudeScriptDraftingService implements ScriptDraftingService 
                         "Las escenas deben venir en orden " + List.of(EXPECTED_ORDER) + ", pero en la posición "
                                 + i + " llegó " + role + ".");
             }
-            String narrationText = String.valueOf(entry.get("narrationText"));
-            String visualPrompt = String.valueOf(entry.get("visualPrompt"));
+            String narrationText = String.valueOf(entry.narrationText());
+            String visualPrompt = String.valueOf(entry.visualPrompt());
             drafts.add(new SceneDraft(role, narrationText, visualPrompt));
         }
         return drafts;
