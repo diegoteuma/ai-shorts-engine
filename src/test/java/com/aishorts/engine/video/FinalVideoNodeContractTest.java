@@ -4,8 +4,9 @@ import com.aishorts.engine.clips.ClipStore;
 import com.aishorts.engine.clips.Mp4Fixtures;
 import com.aishorts.engine.persistence.JsonFileStoryRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -36,9 +37,10 @@ class FinalVideoNodeContractTest {
     @TempDir
     Path tmp;
 
-    @Test
+    @ParameterizedTest(name = "checkEnabled={0}")
+    @ValueSource(booleans = {true, false})
     @SuppressWarnings("unchecked")
-    void theRealMakeVideoScriptProducesAResultTheServiceUnderstands() throws Exception {
+    void theRealMakeVideoScriptProducesAResultTheServiceUnderstands(boolean checkEnabled) throws Exception {
         assumeTrue(nodeAvailable(), "node no está en el PATH");
         ObjectMapper mapper = new ObjectMapper();
         Path clips = tmp.resolve("clips");
@@ -76,7 +78,7 @@ class FinalVideoNodeContractTest {
         };
 
         FinalVideoProperties props = new FinalVideoProperties(true, renders.toString(), RENDERER.toString(), "node", 1, false,
-                new FinalVideoProperties.Timeouts(60, 120, 60, 60, 60));
+                checkEnabled, new FinalVideoProperties.Timeouts(60, 120, 60, 60, 60));
         ClipStore clipStore = new ClipStore(clips, (url, target) -> {
             throw new AssertionError("no debe descargar nada");
         }, 720, 1280, 1);
@@ -90,9 +92,15 @@ class FinalVideoNodeContractTest {
             assertThat(done.status()).as("error: %s\n%s", done.error(), done.logTail()).isEqualTo(FinalVideoStatus.COMPLETED);
             assertThat(done.stages()).extracting(FinalVideoJob.StageTiming::name)
                     .containsExactly("prepare", "transcribe", "generate", "lint", "check", "render", "validate");
+            // Con check deshabilitado, Node recibe --skip-check y lo informa como etapa omitida.
             assertThat(done.stages()).allSatisfy(s -> {
-                assertThat(s.exitCode()).isZero();
+                boolean skipped = !checkEnabled && s.name().equals("check");
+                assertThat(s.skipped()).isEqualTo(skipped ? Boolean.TRUE : null);
+                assertThat(s.exitCode()).isEqualTo(skipped ? null : 0);
                 assertThat(s.ms()).isNotNull();
+                if (skipped) {
+                    assertThat(s.ms()).isZero();
+                }
             });
             assertThat(done.warnings()).anySatisfy(w -> {
                 assertThat(w.stage()).isEqualTo("generate");

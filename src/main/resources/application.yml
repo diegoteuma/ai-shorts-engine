@@ -48,16 +48,25 @@ engine:
     min-free-bytes: ${FINAL_VIDEO_MIN_FREE_BYTES:1073741824}
     # true: no borrar assets ni copias de la carpeta de trabajo (para depurar).
     keep-work-dir: ${FINAL_VIDEO_KEEP_WORK:false}
+    # false (default): no se corre `hyperframes check` (make-video --skip-check). En la VM
+    # tardó 1119.5 s de 2722.9 s (n = 1) y la composición sale siempre de la misma
+    # plantilla; check se corre en desarrollo cuando cambian la plantilla o generate.mjs.
+    # lint (6.6 s) y la validación del MP4 con ffprobe siguen corriendo siempre.
+    check-enabled: ${FINAL_VIDEO_CHECK_ENABLED:false}
     # Segundos. Valores iniciales SIN MEDIR en la VM, salvo el render (1014 s medidos
     # para tunguska con --workers 1; 1800 deja margen). Transcripción: por escena.
     timeouts:
       transcribe-scene-seconds: ${FINAL_VIDEO_TRANSCRIBE_TIMEOUT_SECONDS:600}
       generate-seconds: ${FINAL_VIDEO_GENERATE_TIMEOUT_SECONDS:120}
       lint-seconds: ${FINAL_VIDEO_LINT_TIMEOUT_SECONDS:120}
-      # check: 1200 PROVISORIO. En Windows check tardó 47 s y render 61 s, y en la VM el
-      # render tardó 1014 s (~17 veces más). Si check escala parecido (HIPÓTESIS SIN MEDIR
-      # en la VM) rondaría los 800 s y 300 mataría corridas sanas. Ajustar al medirlo.
-      check-seconds: ${FINAL_VIDEO_CHECK_TIMEOUT_SECONDS:1200}
+      # check: 2400. Medido en la VM (e2-small, JVM encendida, explosion-halifax, 6 escenas,
+      # video de 39.2 s): check tardó 1119.5 s, el 93 % del timeout anterior de 1200 s y
+      # ~24 veces los 47 s de Windows (tunguska; dato del comentario anterior, no
+      # re-verificado). 2400 es ~2.1 veces lo medido. Sale de UNA SOLA corrida: es una
+      # hipótesis a revalidar con más corridas, no un valor garantizado.
+      check-seconds: ${FINAL_VIDEO_CHECK_TIMEOUT_SECONDS:2400}
+      # render: 1382.7 s en esa misma corrida (77 % de 1800). Si algún render supera
+      # ~1500 s, reconsiderar este valor.
       render-seconds: ${FINAL_VIDEO_RENDER_TIMEOUT_SECONDS:1800}
 
 # Límites de la descarga de clips. max-bytes es por clip (los 6 clips reales de

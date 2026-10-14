@@ -258,7 +258,9 @@ el endpoint de video final (abajo), que está deshabilitado por defecto.
 ## Video final (`video/`, deshabilitado por defecto)
 
 > **No exponer a internet sin autenticación.** La API no tiene auth y este
-> endpoint lanza procesos pesados (Node, Chrome, FFmpeg) durante ~17 min. Por
+> endpoint lanza procesos pesados (Node, Chrome, FFmpeg) durante ~45 min
+> con `check` (medido una vez en la VM; ~27 min sin `check`, estimado restando
+> esa etapa). Por
 > eso viene apagado: sin `FINAL_VIDEO_ENABLED=true` no existen ni el servicio
 > ni las rutas (404).
 
@@ -266,7 +268,8 @@ el endpoint de video final (abajo), que está deshabilitado por defecto.
 bien, responde **202** y lanza en segundo plano **un único** proceso:
 `node video-renderer/src/make-video.mjs`, que transcribe cada escena
 (Parakeet vía `hyperframes transcribe`), genera la composición
-(`generate.mjs`), corre `hyperframes lint` y `check`, renderiza con
+(`generate.mjs`), corre `hyperframes lint` (y `check` solo si
+`FINAL_VIDEO_CHECK_ENABLED=true`, ver abajo), renderiza con
 `hyperframes@0.8.143 render --workers 1 --quality standard` y valida el MP4
 con `ffprobe` (720×1280, video y audio, duración = suma de `targetDuration`
 ± 0.25 s). Java no reimplementa nada de HyperFrames: solo valida, lanza el
@@ -275,7 +278,7 @@ proceso, lee `make-video-result.json` y publica el MP4 con un move atómico.
 | Ruta | Respuesta |
 |---|---|
 | `POST /stories/{id}/final-video` (cuerpo opcional `{"force": true}`) | 202 `{jobId, storyId, status, stage}` + `Location`. 404 historia inexistente. 409 si ya hay un render en curso **de cualquier historia** (trae su `jobId`), si ya existe el video y no se pasó `force`, o si hay escenas sin terminar (falta clip local, falta audio, generación no COMPLETED, poco disco, Node no disponible). 422 por datos inválidos (ids fuera de `[A-Za-z0-9_-]`, clip que no pasa `Mp4Probe` o no es 720×1280). 409/422 traen `scenes: {idEscena: motivo}` y no lanzan nada. |
-| `GET /stories/{id}/final-video` | El trabajo vigente: `status` (PENDING, RUNNING, COMPLETED, FAILED), `stage` (en curso o la que falló), `stages` (ms y código de salida de cada etapa), `warnings`, `error`, `logTail` (últimos 4 KB del log de la etapa fallida), `output`. 404 si nunca hubo uno. |
+| `GET /stories/{id}/final-video` | El trabajo vigente: `status` (PENDING, RUNNING, COMPLETED, FAILED), `stage` (en curso o la que falló), `stages` (ms y código de salida de cada etapa; `check` omitido trae `skipped: true`), `warnings`, `error`, `logTail` (últimos 4 KB del log de la etapa fallida), `output`. 404 si nunca hubo uno. |
 | `GET /stories/{id}/final-video/file` | El MP4 (`video/mp4`, admite `Range`). 404 si el trabajo vigente no está COMPLETED. |
 
 Reglas:
@@ -301,19 +304,50 @@ Variables (todas con default, en `engine.final-video` de `application.yml`):
 `FINAL_VIDEO_ENABLED` (false), `RENDERS_DIR` (`./data/renders`),
 `VIDEO_RENDERER_DIR` (`./video-renderer`), `NODE_COMMAND` (`node`),
 `FINAL_VIDEO_MIN_FREE_BYTES` (1 GiB, **suposición sin medir**),
-`FINAL_VIDEO_KEEP_WORK` (false; true conserva assets para depurar) y los
+`FINAL_VIDEO_KEEP_WORK` (false; true conserva assets para depurar),
+`FINAL_VIDEO_CHECK_ENABLED` (false; ver "`check` deshabilitado" abajo) y los
 timeouts en segundos `FINAL_VIDEO_TRANSCRIBE_TIMEOUT_SECONDS` (600, por
 escena), `FINAL_VIDEO_GENERATE_TIMEOUT_SECONDS` (120),
 `FINAL_VIDEO_LINT_TIMEOUT_SECONDS` (120), `FINAL_VIDEO_CHECK_TIMEOUT_SECONDS`
-(1200) y `FINAL_VIDEO_RENDER_TIMEOUT_SECONDS` (1800). Solo el de render se
-apoya en una medición (1014 s para tunguska en la VM); los demás son valores
-iniciales. El de `check` es **provisorio**: en Windows `check` tardó 47 s y
-`render` 61 s, y en la VM el render tardó 1014 s; si `check` escala parecido
-(hipótesis **sin medir** en la VM), 300 s mataría corridas sanas.
+(2400) y `FINAL_VIDEO_RENDER_TIMEOUT_SECONDS` (1800). Los de `check` y
+`render` se apoyan en **una sola** corrida completa en la VM (ver "Medir en la
+VM" abajo): `check` tardó 1119.5 s (93 % del timeout anterior de 1200 s), así
+que se subió a 2400 (~2.1× lo medido); `render` tardó 1382.7 s (77 % de 1800)
+y se deja igual, pero si algún render supera ~1500 s hay que reconsiderarlo.
+Con n = 1 son hipótesis a revalidar, no valores garantizados. El tope de todo
+el proceso de Node es la suma de las etapas que corren más 5 min (con 6
+escenas: 6240 s sin `check`, 8340 s con `check`).
+
+**`check` deshabilitado por defecto.** En la VM `check` tardó 1119.5 s de
+2722.9 s (41 %, n = 1) y no encontró nada. La composición sale siempre de la
+misma plantilla (`generate.mjs`, con pruebas golden), así que lo que `check`
+valida en layout y motion depende de la plantilla, no de cada historia. Con
+`FINAL_VIDEO_CHECK_ENABLED=false` Node corre con `--skip-check` y `check`
+queda en `stages` como `{"name":"check","ms":0,"skipped":true}`. `lint` y la
+validación del MP4 con `ffprobe` siguen corriendo siempre. Lo que se pierde:
+- **Contraste WCAG por historia**: subtítulos sobre un clip claro. Ya era solo
+  un aviso (nunca hacía fallar el trabajo).
+- `clip_media_fit` y errores de runtime (imagen rota, HTTP) antes del render:
+  sin `check` aparecerían como un render fallido o malo, más tarde.
+- La red de seguridad ante cambios de plantilla: **correr `check` en
+  desarrollo** (`npx hyperframes@0.8.143 check` en la carpeta generada, ~47 s
+  en Windows) cada vez que cambien la plantilla o `generate.mjs`, o poner
+  `FINAL_VIDEO_CHECK_ENABLED=true` para una corrida puntual en la VM.
 
 Requisitos del servidor: Node ≥ 22, FFmpeg (`ffprobe` en el PATH), Chrome
 Headless Shell para HyperFrames y acceso a `registry.npmjs.org` y, la primera
 vez, a `huggingface.co` (descarga del modelo Parakeet).
+
+**Prerrequisito de despliegue: el modelo de transcripción.** Sin él, el
+trabajo falla en `transcribe` con `whisper_unavailable` (en ~6 s). El remedio
+que imprime la propia CLI es instalarlo una vez, desde `video-renderer/`, con
+el **mismo usuario** que corre el backend y **sin sudo** (necesita salida a
+internet la primera vez):
+
+```bash
+cd video-renderer
+npx hyperframes@0.8.143 models install parakeet
+```
 
 ```bash
 FINAL_VIDEO_ENABLED=true ... mvn spring-boot:run
@@ -325,11 +359,35 @@ curl -i -X POST -H 'Content-Type: application/json' -d '{"force":true}' \
      localhost:8080/stories/tunguska/final-video                     # rehacerlo
 ```
 
-### Medir en la VM con el backend levantado (pendiente)
+### Medir en la VM con el backend levantado
 
-Lo medido hasta ahora en `ai-shorts-vm` es solo el render suelto (1014 s,
-419 MB mínimos disponibles). Falta medir Parakeet y el render con la JVM
-corriendo al lado. Procedimiento:
+Primera corrida completa del endpoint en `ai-shorts-vm` (e2-small: 2 vCPU,
+1964 MB, sin swap), **con la JVM del backend encendida**, historia
+`explosion-halifax` (6 escenas, video final de 39.2 s). Trabajo COMPLETED.
+**n = 1**: sirve para dimensionar, no para concluir.
+
+| Etapa | Duración | Timeout entonces | Uso |
+|---|---|---|---|
+| transcribe (6 escenas) | 206.6 s (~34 s/escena) | 600 s/escena | ~6 % |
+| generate | 6.1 s | 120 s | 5 % |
+| lint | 6.6 s | 120 s | 5 % |
+| check | 1119.5 s | 1200 s | 93 % |
+| render | 1382.7 s | 1800 s | 77 % |
+| validate | 0.1 s | — | — |
+
+- Total: 2722.9 s (45.4 min); `check` es el 41 %. Se suponía que `check`
+  escalaría como el render (~17× Windows, ~800 s); fue ~24× los 47 s de
+  Windows (otra historia, tunguska).
+- `check` no emitió avisos en esta corrida (sí `generate`: 4 palabras con
+  tiempo inferido, y `lint`: `composition_file_too_large`, 1201 líneas). Con
+  n = 1 no se puede concluir que `check` nunca encuentre nada.
+- Memoria (monitor externo, no la mide el código): pico 1625 MB usados /
+  mínimo 180 MB disponibles durante `render`; durante `check`, pico 1337 MB /
+  mínimo 465 MB.
+- Antes de esto solo se había medido el render suelto (1014 s para tunguska,
+  419 MB mínimos disponibles).
+
+Procedimiento para repetir la medición:
 
 1. Levantar el backend con `FINAL_VIDEO_ENABLED=true` y una historia con los
    6 clips en `CLIPS_DIR` y los audios en `AUDIO_DIR`.

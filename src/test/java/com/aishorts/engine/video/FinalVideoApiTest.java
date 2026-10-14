@@ -122,6 +122,14 @@ class FinalVideoApiTest {
         assertThat(done.get("finishedAt")).isNotNull();
         assertThat((List<Map<String, Object>>) done.get("stages")).extracting(s -> s.get("name"))
                 .containsExactly("prepare", "transcribe", "generate", "lint", "check", "render", "validate");
+        // FINAL_VIDEO_CHECK_ENABLED es false por defecto: check aparece en stages, pero omitido.
+        assertThat((List<Map<String, Object>>) done.get("stages")).filteredOn(s -> "check".equals(s.get("name")))
+                .singleElement().satisfies(s -> {
+                    assertThat(s).containsEntry("skipped", true).containsEntry("ms", 0);
+                    assertThat(s.get("exitCode")).isNull();
+                });
+        assertThat((List<Map<String, Object>>) done.get("stages")).filteredOn(s -> !"check".equals(s.get("name")))
+                .allSatisfy(s -> assertThat(s.get("skipped")).isNull());
         assertThat((List<Map<String, Object>>) done.get("warnings")).singleElement()
                 .satisfies(w -> assertThat(w).containsEntry("stage", "lint"));
 
@@ -135,8 +143,9 @@ class FinalVideoApiTest {
         assertThat(arg(cmd, "--audio-dir")).isEqualTo(dataDir.resolve("audio").toAbsolutePath().normalize().toString());
         assertThat(arg(cmd, "--render-timeout-sec")).isEqualTo("1800");
         assertThat(arg(cmd, "--transcribe-timeout-sec")).isEqualTo("600");
-        assertThat(arg(cmd, "--check-timeout-sec")).isEqualTo("1200"); // default provisorio de application.yml
+        assertThat(arg(cmd, "--check-timeout-sec")).isEqualTo("2400"); // default de application.yml (medido n = 1 en la VM)
         assertThat(cmd).doesNotContain("--keep-work");
+        assertThat(cmd).contains("--skip-check");
         Path work = Path.of(arg(cmd, "--work"));
         assertThat(work).isEqualTo(dataDir.resolve("renders").resolve("fv-ok").resolve("job-" + jobId).resolve("work").toAbsolutePath().normalize());
         String storyJson = Files.readString(Path.of(arg(cmd, "--story")));

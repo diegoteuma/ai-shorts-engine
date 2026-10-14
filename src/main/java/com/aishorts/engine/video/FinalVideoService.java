@@ -341,6 +341,9 @@ public final class FinalVideoService {
         if (props.keepWorkDir()) {
             command.add("--keep-work");
         }
+        if (!props.checkEnabled()) {
+            command.add("--skip-check");
+        }
         Duration timeout = props.totalTimeout(sceneCount);
         log.info("Video final de '{}' (trabajo {}): {}", job.storyId(), job.id(), command);
 
@@ -517,7 +520,8 @@ public final class FinalVideoService {
                     Map<String, Object> s = (Map<String, Object>) m;
                     stages.add(new FinalVideoJob.StageTiming(str(s.get("name")), longOrNull(s.get("ms")),
                             s.get("exitCode") instanceof Number n ? n.intValue() : null,
-                            Boolean.TRUE.equals(s.get("timedOut")) ? Boolean.TRUE : null));
+                            Boolean.TRUE.equals(s.get("timedOut")) ? Boolean.TRUE : null,
+                            Boolean.TRUE.equals(s.get("skipped")) ? Boolean.TRUE : null));
                 }
             }
         }

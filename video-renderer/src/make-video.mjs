@@ -6,6 +6,8 @@
 // Lo lanza el backend Java (un proceso por trabajo) y también se puede correr a mano.
 // --clips-dir y --audio-dir son carpetas PLANAS (<idEscena>.mp4 y <idEscena>.mp3, como las dejan CLIPS_DIR y AUDIO_DIR).
 // --work debe no existir o estar vacía: es la carpeta del proyecto HyperFrames y del resultado.
+// --skip-check omite `hyperframes check`: en la VM (e2-small) tardó 1119.5 s de 2722.9 s (n = 1) y la composición sale
+// siempre de la misma plantilla, así que se valida en desarrollo. Queda en `stages` como { name: "check", skipped: true }.
 //
 // Carpeta de trabajo:
 //   input/{clips,audio}/   symlinks a los archivos originales (o copias si el sistema no deja crear symlinks)
@@ -36,7 +38,7 @@ export const DEFAULTS = {
   transcribeTimeoutSec: 600, // por escena
   generateTimeoutSec: 120,
   lintTimeoutSec: 120,
-  checkTimeoutSec: 300,
+  checkTimeoutSec: 2400, // medido en la VM (n = 1): 1119.5 s para explosion-halifax; igual que el default de Java
   renderTimeoutSec: 1800, // medido en la VM: 1014 s para tunguska con --workers 1
   maxDurationDiffSec: 0.25, // medido: 37.434 s de video contra 37.431 s esperados
 };
@@ -54,6 +56,7 @@ const USAGE = `Uso: node src/make-video.mjs --story <archivo> --clips-dir <dir> 
   --render-timeout-sec <s>         (por defecto ${DEFAULTS.renderTimeoutSec})
   --max-duration-diff-sec <s>      diferencia máxima entre el video y la suma de targetDuration (por defecto ${DEFAULTS.maxDurationDiffSec})
   --keep-work                      no borrar assets ni copias al terminar (para depurar)
+  --skip-check                     no correr \`hyperframes check\` (queda en stages con skipped: true)
   --help`;
 
 class UsageError extends Error {}
@@ -72,7 +75,7 @@ const VALUE_FLAGS = new Set([
   "transcribe-timeout-sec", "generate-timeout-sec", "lint-timeout-sec", "check-timeout-sec", "render-timeout-sec",
   "max-duration-diff-sec",
 ]);
-const BOOL_FLAGS = new Set(["keep-work", "help"]);
+const BOOL_FLAGS = new Set(["keep-work", "skip-check", "help"]);
 
 function parseArgs(argv) {
   const args = {};
@@ -335,6 +338,12 @@ export async function makeVideo(args) {
     });
 
     for (const [stage, sections] of [["lint", null], ["check", CHECK_SECTIONS]]) {
+      if (stage === "check" && args["skip-check"]) {
+        result.stages.push({ name: "check", ms: 0, exitCode: null, skipped: true });
+        await saveResult();
+        console.log("ETAPA check OMITIDA");
+        continue;
+      }
       await runStage(stage, async () => {
         const r = await runHf([stage, "--json"], stage);
         const json = parseJsonOutput(r.stdout);

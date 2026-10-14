@@ -13,7 +13,8 @@ import java.util.List;
  * @param stage     etapa en curso (RUNNING) o la que falló (FAILED); null si no aplica
  * @param error     mensaje corto si FAILED
  * @param logTail   últimos ~4 KB del log de la etapa que falló
- * @param stages    duración y código de salida de cada etapa terminada (de make-video-result.json)
+ * @param stages    duración y código de salida de cada etapa terminada (de make-video-result.json);
+ *                  una etapa omitida (check con FINAL_VIDEO_CHECK_ENABLED=false) trae skipped = true
  * @param output    ruta del MP4 relativa a RENDERS_DIR, solo si COMPLETED
  */
 public record FinalVideoJob(
@@ -35,7 +36,7 @@ public record FinalVideoJob(
     public record Warning(String stage, String message) {
     }
 
-    public record StageTiming(String name, Long ms, Integer exitCode, Boolean timedOut) {
+    public record StageTiming(String name, Long ms, Integer exitCode, Boolean timedOut, Boolean skipped) {
     }
 
     public FinalVideoJob {
