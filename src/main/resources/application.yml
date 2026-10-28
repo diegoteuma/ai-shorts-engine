@@ -132,6 +132,11 @@ app:
     # de OkHttp en Http11OkHttpClient (callTimeout en 0).
     read-timeout-seconds: ${CLAUDE_READ_TIMEOUT_SECONDS:180}
     max-pause-continuations: 5
+    # Tope de salida POR LLAMADA del generador de historias. En claude-sonnet-5-5 el thinking
+    # adaptativo está activo por defecto y max_tokens limita thinking + texto juntos: con
+    # 16000 una respuesta puede quedar entera en thinking y llegar sin texto (stop_reason
+    # max_tokens; así lo advierte la guía de migración de la API). 64000 es lo recomendado con streaming; el máximo del modelo es 128000.
+    max-tokens: ${CLAUDE_DRAFT_MAX_TOKENS:64000}
     words-per-second: 2.65
     min-total-words: 92
     max-total-words: 104

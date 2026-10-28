@@ -314,7 +314,7 @@ public final class DraftNormalizer {
         return Math.round(value * 100.0) / 100.0;
     }
 
-    private static String truncate(String text) {
+    static String truncate(String text) {
         if (text == null) {
             return null;
         }

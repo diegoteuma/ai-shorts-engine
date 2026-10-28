@@ -22,6 +22,12 @@ public final class FakeStoryDraftGenerator implements StoryDraftGenerator {
         return this;
     }
 
+    /** Un resultado completo (stop_reason, llamadas, bloques), para los casos de respuesta vacía o cortada. */
+    public synchronized FakeStoryDraftGenerator enqueueResult(GeneratorResult result) {
+        responses.add(result);
+        return this;
+    }
+
     public synchronized FakeStoryDraftGenerator enqueueFailure(RuntimeException failure) {
         responses.add(failure);
         return this;

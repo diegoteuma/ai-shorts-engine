@@ -17,6 +17,7 @@ public record DraftsProperties(
         WebSearch webSearch,
         int readTimeoutSeconds,
         int maxPauseContinuations,
+        int maxTokens,
         double wordsPerSecond,
         int minTotalWords,
         int maxTotalWords,

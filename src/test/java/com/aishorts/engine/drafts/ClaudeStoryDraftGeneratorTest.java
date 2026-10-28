@@ -104,10 +104,15 @@ class ClaudeStoryDraftGeneratorTest {
         assertThat(result.researchedUrls()).containsExactly("https://science.nasa.gov/a", "https://www.britannica.com/b");
         assertThat(result.usage()).isEqualTo(new DraftUsage(300, 60, 3));
         assertThat(result.stopReason()).isEqualTo("end_turn");
+        assertThat(result.calls()).isEqualTo(2);
+        assertThat(result.blockCounts()).isEqualTo(Map.of("text", 3, "server_tool_use", 1, "web_search_tool_result", 1));
 
         assertThat(receivedRequests).hasSize(2);
         Map<String, Object> first = receivedRequests.get(0);
         assertThat(first.get("model")).isEqualTo("test-model");
+        // app.drafts.max-tokens (64000), no el 16000 de ClaudeConfig
+        assertThat(first.get("max_tokens")).isEqualTo(64000);
+        assertThat(receivedRequests.get(1).get("max_tokens")).isEqualTo(64000);
         assertThat(first.get("tools")).isEqualTo(List.of(Map.of("type", "web_search_20260318", "name", "web_search", "max_uses", 10)));
         Map<String, Object> continuation = receivedRequests.get(1);
         assertThat(continuation.get("container")).isEqualTo("cont_1");
@@ -154,6 +159,22 @@ class ClaudeStoryDraftGeneratorTest {
         assertKeptIntact(expected, resent.get(2), "content[2]");
         assertThat(((Map<String, Object>) resent.get(2)).get("input")).isEqualTo(expected.get("input")); // ni una clave de más
         assertKeptIntact(Map.of("input", Map.of("query", "tunguska")), resent.get(1), "content[1]");
+    }
+
+    @Test
+    void thinkingOnlyResponseCutByMaxTokens_returnsNoText_withItsStopReasonAndBlocks() {
+        // la forma de (B): el presupuesto se va en thinking (display omitted: texto vacío) y no llega texto
+        respond(200, """
+                {"stop_reason":"max_tokens","usage":{"input_tokens":100,"output_tokens":64000},
+                 "content":[{"type":"thinking","thinking":"","signature":"sig-1"}]}""");
+
+        GeneratorResult result = generator().generate(draftRequest());
+
+        assertThat(result.text()).isEmpty();
+        assertThat(result.stopReason()).isEqualTo("max_tokens");
+        assertThat(result.calls()).isEqualTo(1);
+        assertThat(result.blockCounts()).isEqualTo(Map.of("thinking", 1));
+        assertThat(result.usage().outputTokens()).isEqualTo(64000);
     }
 
     /** Todo lo que trae {@code original} está en {@code resent} con el mismo valor (puede haber campos de más). */
@@ -279,7 +300,7 @@ class ClaudeStoryDraftGeneratorTest {
     }
 
     private static DraftsProperties withReadTimeout(DraftsProperties p, int seconds) {
-        return new DraftsProperties(p.dir(), p.rulesResource(), p.webSearch(), seconds, p.maxPauseContinuations(),
+        return new DraftsProperties(p.dir(), p.rulesResource(), p.webSearch(), seconds, p.maxPauseContinuations(), p.maxTokens(),
                 p.wordsPerSecond(), p.minTotalWords(), p.maxTotalWords(), p.minSceneSeconds(), p.maxSceneSeconds(),
                 p.sceneWordRanges(), p.styleAnchor(), p.forbiddenVisualTerms(), p.negativePromptTerms(),
                 p.slowRevealTerms(), p.absoluteTerms(), p.tierADomains(), p.tierBDomains(), p.orientationOnlyDomains());

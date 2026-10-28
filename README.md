@@ -254,6 +254,7 @@ CLAUDE_WEB_SEARCH_MAX_USES_PROPOSALS      3      (tope de búsquedas por pedido 
 CLAUDE_WEB_SEARCH_TOOL_VERSION            web_search_20260318
 CLAUDE_WEB_SEARCH_FALLBACK_TOOL_VERSION   web_search_20250305 (se usa con allowed_callers [direct] si el modelo rechaza la anterior)
 CLAUDE_READ_TIMEOUT_SECONDS               180    (máximo sin recibir eventos del stream; no limita la duración total)
+CLAUDE_DRAFT_MAX_TOKENS                   64000  (tope de salida por llamada del borrador: thinking + texto juntos)
 DRAFTS_DIR                                ./data/drafts (ignorado por git)
 ```
 

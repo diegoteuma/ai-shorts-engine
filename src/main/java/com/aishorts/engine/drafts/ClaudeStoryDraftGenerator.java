@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * StoryDraftGenerator real: una pasada contra la Messages API de Claude,
@@ -116,10 +117,14 @@ public final class ClaudeStoryDraftGenerator implements StoryDraftGenerator, Aut
         String containerId = null;
         String stopReason;
 
+        // app.drafts.max-tokens: el borrador necesita más que el resto (thinking + JSON de 6 escenas)
+        long maxTokens = properties.maxTokens() > 0 ? properties.maxTokens() : config.maxTokens();
+        int calls = 0;
+
         for (int continuation = 0; ; continuation++) {
             MessageCreateParams.Builder params = MessageCreateParams.builder()
                     .model(config.model())
-                    .maxTokens(config.maxTokens())
+                    .maxTokens(maxTokens)
                     .system(request.systemPrompt())
                     .addUserMessage(request.userMessage());
             if (!resendBlocks.isEmpty()) {
@@ -136,6 +141,7 @@ public final class ClaudeStoryDraftGenerator implements StoryDraftGenerator, Aut
             }
 
             Message response = client.stream(params.build());
+            calls++;
             for (ContentBlock block : response.content()) {
                 assistantBlocks.add(ClaudeStreamingClient.toMap(block));
                 resendBlocks.add(ClaudeStreamingClient.toJsonValue(block));
@@ -157,19 +163,22 @@ public final class ClaudeStoryDraftGenerator implements StoryDraftGenerator, Aut
         if ("refusal".equals(stopReason)) {
             throw new DraftException(502, "Claude se negó a generar el contenido (stop_reason=refusal).");
         }
-        if ("max_tokens".equals(stopReason)) {
-            log.info("La respuesta de Claude se cortó por max_tokens; el JSON probablemente quedó incompleto.");
-        }
 
         StringBuilder text = new StringBuilder();
         Set<String> urls = new LinkedHashSet<>();
+        Map<String, Integer> blockCounts = new TreeMap<>();
         for (Object block : assistantBlocks) {
-            if (block instanceof Map<?, ?> map && "text".equals(map.get("type")) && map.get("text") instanceof String t) {
-                text.append(t);
+            if (block instanceof Map<?, ?> map) {
+                blockCounts.merge(String.valueOf(map.get("type")), 1, Integer::sum);
+                if ("text".equals(map.get("type")) && map.get("text") instanceof String t) {
+                    text.append(t);
+                }
             }
             collectUrls(block, urls);
         }
-        return new GeneratorResult(text.toString(), new ArrayList<>(urls), usage, stopReason);
+        log.info("Pasada {} terminada: stop_reason={}, llamadas={}, bloques={}, max_tokens={}, usage={}",
+                request.mode(), stopReason, calls, blockCounts, maxTokens, usage);
+        return new GeneratorResult(text.toString(), new ArrayList<>(urls), usage, stopReason, calls, blockCounts);
     }
 
     /** Recorre cualquier estructura de bloques buscando resultados de búsqueda y citas web. */
