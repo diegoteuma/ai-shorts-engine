@@ -171,16 +171,19 @@ public final class StoryDraftService {
                 Mode.DRAFT, system, prompts.draftUserMessage(topic, rejectedDraft), webSearch, maxUses));
         Set<String> researched = new LinkedHashSet<>(first.researchedUrls());
         DraftUsage usage = first.usage();
-        Attempt attempt = evaluate(first.text(), researched, context, today);
+        List<StoryDraft.GenerationAttempt> diagnostics = new ArrayList<>(List.of(diagnostics(Mode.DRAFT, first)));
+        Attempt attempt = evaluate(first, researched, context, today);
         int attempts = 1;
 
-        if (!attempt.hardViolations().isEmpty()) {
+        // Sin texto o cortada por max_tokens: el reintento (mismo max_tokens, sin herramientas) fallaría igual y cuesta.
+        if (!attempt.hardViolations().isEmpty() && !attempt.incompleteResponse()) {
             String retrySystem = prompts.systemPrompt("BORRADOR", today, context.existingStories(), false, 0);
             String retryUser = prompts.retryUserMessage(topic, rejectedDraft, first.text(), attempt.hardViolations());
             GeneratorResult second = generator.generate(new GeneratorRequest(Mode.DRAFT_RETRY, retrySystem, retryUser, false, 0));
             researched.addAll(second.researchedUrls());
             usage = usage.plus(second.usage());
-            attempt = evaluate(second.text(), researched, context, today);
+            diagnostics.add(diagnostics(Mode.DRAFT_RETRY, second));
+            attempt = evaluate(second, researched, context, today);
             attempts = 2;
         }
 
@@ -202,6 +205,7 @@ public final class StoryDraftService {
         draft.createdAt = OffsetDateTime.now(clock).toString();
         draft.researchedUrls = new ArrayList<>(researched);
         draft.usage = usage;
+        draft.generationAttempts = diagnostics;
         setViolations(draft, violations);
         return draft;
     }
@@ -210,9 +214,47 @@ public final class StoryDraftService {
         List<Violation> hardViolations() {
             return DraftValidator.hardOnly(violations);
         }
+
+        boolean incompleteResponse() {
+            return violations.stream().anyMatch(v -> RESPONSE_EMPTY.equals(v.code()) || RESPONSE_TRUNCATED.equals(v.code()));
+        }
     }
 
-    private Attempt evaluate(String text, Set<String> researched, DraftContext context, LocalDate today) {
+    static final String RESPONSE_EMPTY = "RESPONSE_EMPTY";
+    static final String RESPONSE_TRUNCATED = "RESPONSE_TRUNCATED";
+
+    private static StoryDraft.GenerationAttempt diagnostics(Mode mode, GeneratorResult result) {
+        return new StoryDraft.GenerationAttempt(mode.name(), result.stopReason(), result.calls(), result.blockCounts());
+    }
+
+    /**
+     * Una respuesta sin texto o cortada por max_tokens no es un "JSON
+     * inválido" del modelo: el error lo dice explícito (stop_reason y bloques
+     * recibidos) y corta el reintento. El texto parcial, si lo hay, queda en
+     * unparsedResponse.
+     */
+    private static Violation incompleteResponse(GeneratorResult result) {
+        String detail = "stop_reason=" + result.stopReason() + ", bloques " + result.blockCounts()
+                + ", " + result.usage().outputTokens() + " tokens de salida";
+        if ("max_tokens".equals(result.stopReason())) {
+            return Violation.hard(RESPONSE_TRUNCATED, "Respuesta de Claude cortada por max_tokens (" + detail
+                    + "): el JSON quedó incompleto. Subí app.drafts.max-tokens (CLAUDE_DRAFT_MAX_TOKENS); no se reintentó.");
+        }
+        if (result.text() == null || result.text().isBlank()) {
+            return Violation.hard(RESPONSE_EMPTY, "Respuesta de Claude sin texto (" + detail + "); no se reintentó.");
+        }
+        return null;
+    }
+
+    private Attempt evaluate(GeneratorResult result, Set<String> researched, DraftContext context, LocalDate today) {
+        Violation incomplete = incompleteResponse(result);
+        if (incomplete != null) {
+            StoryDraft empty = new StoryDraft();
+            empty.unparsedResponse = result.text() == null || result.text().isBlank() ? null : DraftNormalizer.truncate(result.text());
+            List<Violation> violations = List.of(incomplete);
+            return new Attempt(empty, violations, violations, true);
+        }
+        String text = result.text();
         DraftNormalizer.Parsed parsed = normalizer.parse(text);
         StoryDraft draft = parsed.draft();
         if (parsed.jsonInvalid()) {

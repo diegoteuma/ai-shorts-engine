@@ -1,6 +1,7 @@
 package com.aishorts.engine.drafts;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Puerto hacia el LLM que escribe borradores y propuestas. La
@@ -29,11 +30,19 @@ public interface StoryDraftGenerator {
      * @param text           texto concatenado de todos los bloques de texto del asistente
      * @param researchedUrls URLs que de verdad aparecieron en web_search_tool_result o en citas
      * @param stopReason     stop_reason de la última respuesta
+     * @param calls          llamadas a la API en esta pasada (1 + continuaciones tras pause_turn)
+     * @param blockCounts    cantidad de bloques por tipo en todas esas respuestas (sin contenido)
      */
-    record GeneratorResult(String text, List<String> researchedUrls, DraftUsage usage, String stopReason) {
+    record GeneratorResult(String text, List<String> researchedUrls, DraftUsage usage, String stopReason,
+                           int calls, Map<String, Integer> blockCounts) {
         public GeneratorResult {
             researchedUrls = researchedUrls != null ? List.copyOf(researchedUrls) : List.of();
             usage = usage != null ? usage : DraftUsage.ZERO;
+            blockCounts = blockCounts != null ? Map.copyOf(blockCounts) : Map.of();
+        }
+
+        public GeneratorResult(String text, List<String> researchedUrls, DraftUsage usage, String stopReason) {
+            this(text, researchedUrls, usage, stopReason, 1, Map.of());
         }
     }
 }

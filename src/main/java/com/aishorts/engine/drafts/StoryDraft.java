@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Borrador de historia generado por Claude, tal como se guarda en
@@ -43,6 +44,16 @@ public final class StoryDraft {
     public DraftUsage usage = DraftUsage.ZERO;
     /** Texto crudo de la última respuesta de Claude, solo cuando no se pudo leer como JSON (para diagnosticar). */
     public String unparsedResponse;
+    /** Una entrada por intento (DRAFT y, si hubo, DRAFT_RETRY): cómo terminó, sin contenido. Lo pone el servidor. */
+    public List<GenerationAttempt> generationAttempts = new ArrayList<>();
+
+    /**
+     * Diagnóstico de un intento: stop_reason de la última respuesta, llamadas
+     * a la API (1 + continuaciones por pause_turn) y bloques por tipo
+     * ("text", "thinking", "server_tool_use", ...), sin contenido.
+     */
+    public record GenerationAttempt(String mode, String stopReason, int calls, Map<String, Integer> blockCounts) {
+    }
 
     public String rejectionNote;
     public String decidedAt;

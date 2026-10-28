@@ -178,6 +178,63 @@ class StoryDraftGenerationApiTest extends DraftApiTestSupport {
         assertThat(draftsDir().resolve("tunguska-x.json")).exists();
     }
 
+    // --- respuesta sin texto o cortada: error explícito y SIN reintento ---------------------
+
+    @Test
+    void emptyResponse_onlyThinking_isAnExplicitHardViolation_notJsonInvalid_andIsNotRetried() {
+        // lo que se vio en producción (B): todo thinking, sin un solo bloque de texto
+        fake.enqueueResult(new StoryDraftGenerator.GeneratorResult("", RESEARCHED, new DraftUsage(208920, 16000, 10),
+                "end_turn", 3, Map.of("thinking", 4, "server_tool_use", 10, "web_search_tool_result", 10)));
+
+        ResponseEntity<Map> response = post("/story-drafts", Map.of("topic", "La tormenta solar de Carrington de 1859"));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(201);
+        Map<String, Object> body = response.getBody();
+        assertThat(body.get("attempts")).isEqualTo(1);
+        assertThat(fake.requests()).hasSize(1); // sin reintento
+        List<Map<String, Object>> violations = (List<Map<String, Object>>) body.get("violations");
+        assertThat(violations).filteredOn(v -> "HARD".equals(v.get("severity")))
+                .extracting(v -> v.get("code")).containsExactly("RESPONSE_EMPTY");
+        assertThat(violations).extracting(v -> v.get("code")).doesNotContain("JSON_INVALID");
+        assertThat((String) violations.get(0).get("message"))
+                .contains("sin texto", "stop_reason=end_turn", "thinking=4", "16000 tokens de salida");
+        assertThat(body.get("unparsedResponse")).isNull();
+        assertThat(body.get("usage")).isEqualTo(Map.of("inputTokens", 208920, "outputTokens", 16000, "webSearchRequests", 10));
+        assertThat(body.get("generationAttempts")).isEqualTo(List.of(Map.of("mode", "DRAFT", "stopReason", "end_turn", "calls", 3,
+                "blockCounts", Map.of("thinking", 4, "server_tool_use", 10, "web_search_tool_result", 10))));
+    }
+
+    @Test
+    void maxTokens_withPartialText_isResponseTruncated_keepsThePartialText_andIsNotRetried() {
+        String partial = "{\"id\":\"carrington-1859\",\"topic\":\"La tormenta solar";
+        fake.enqueueResult(new StoryDraftGenerator.GeneratorResult(partial, RESEARCHED, new DraftUsage(5000, 64000, 2),
+                "max_tokens", 1, Map.of("thinking", 1, "text", 1)));
+
+        Map<String, Object> body = post("/story-drafts", Map.of("topic", "La tormenta solar de Carrington de 1859")).getBody();
+
+        assertThat(fake.requests()).hasSize(1);
+        assertThat(body.get("attempts")).isEqualTo(1);
+        List<Map<String, Object>> violations = (List<Map<String, Object>>) body.get("violations");
+        assertThat(violations).filteredOn(v -> "HARD".equals(v.get("severity")))
+                .extracting(v -> v.get("code")).containsExactly("RESPONSE_TRUNCATED");
+        assertThat((String) violations.get(0).get("message")).contains("max_tokens", "CLAUDE_DRAFT_MAX_TOKENS");
+        assertThat(body.get("unparsedResponse")).isEqualTo(partial);
+    }
+
+    @Test
+    void invalidJsonWithText_stillRetries_andBothAttemptsAreDiagnosed() {
+        fake.enqueueResult(new StoryDraftGenerator.GeneratorResult("No pude.", List.of(), DraftUsage.ZERO, "end_turn",
+                2, Map.of("text", 1, "thinking", 1)));
+        fake.enqueue(json(validDraft("tunguska-x", "Estallido de Tunguska")), RESEARCHED);
+
+        Map<String, Object> body = post("/story-drafts", Map.of("topic", "Tunguska")).getBody();
+
+        assertThat(fake.requests()).hasSize(2);
+        assertThat(body.get("generationAttempts")).isEqualTo(List.of(
+                Map.of("mode", "DRAFT", "stopReason", "end_turn", "calls", 2, "blockCounts", Map.of("text", 1, "thinking", 1)),
+                Map.of("mode", "DRAFT_RETRY", "stopReason", "end_turn", "calls", 1, "blockCounts", Map.of())));
+    }
+
     @Test
     void retry_invalidJsonTwice_savesUnderASlugOfTheTopic_withTheRawText() {
         fake.enqueue("No pude generar el borrador.", List.of(NASA));
