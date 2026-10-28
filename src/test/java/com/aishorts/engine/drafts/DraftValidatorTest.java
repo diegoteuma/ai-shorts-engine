@@ -338,6 +338,118 @@ class DraftValidatorTest {
         assertOnly(Severity.SOFT, "UNKNOWN_DOMAIN_TIER");
     }
 
+    // --- SOFT: gancho y absolutos ------------------------------------------------------
+
+    /** GANCHO y visualPrompt reales de carrington-1859 (data/stories), generados con las reglas anteriores. */
+    private static final String CARRINGTON_HOOK = "En 1859, una aurora boreal se vio en el Caribe, cerca del ecuador.";
+    private static final String CARRINGTON_HOOK_PROMPT = ANCHOR + ", one continuous shot slowly tilting upward from a calm "
+            + "dark turquoise tropical sea toward a night sky filled with vivid green and red auroral curtains. Silhouettes of "
+            + "palm trees and a quiet sandy shoreline sit in the lower foreground. The aurora ripples slowly and glows brightly "
+            + "above the warm tropical horizon. Documentary-grade photorealism, natural volumetric light, single continuous shot.";
+
+    @Test
+    void soft_hookStartsWithYear_carrington() {
+        scene(draft, 0).put("narrationText", CARRINGTON_HOOK); // 13 palabras: total 95, sigue válido
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("HOOK_STARTS_WITH_DATE");
+        assertThat(violations).allMatch(v -> "tunguska-x-gancho".equals(v.sceneId()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1859: auroras en el Caribe.",
+            "1000 años después, el bosque sigue marcado.",
+            "2099 no es un año cualquiera para este bosque.",
+            "1908: un bosque entero cayó sin que nada tocara el suelo, en Siberia.",
+            "¿1908? Un bosque entero cayó sin que nada tocara el suelo, en Siberia.",
+            "En el año 1908 un bosque entero cayó sin que nada tocara el suelo.",
+            "El 30 de junio un bosque entero cayó sin que nada tocara el suelo.",
+            "El treinta de junio un bosque entero cayó sin que nada tocara el suelo.",
+            "El primero de septiembre un bosque entero cayó sin que nada tocara el suelo.",
+            "El treinta y uno de diciembre un bosque cayó sin que nada tocara el suelo."})
+    void soft_hookStartsWithDate_variants(String hook) {
+        scene(draft, 0).put("narrationText", hook);
+        assertThat(codes(validate(), Severity.SOFT)).contains("HOOK_STARTS_WITH_DATE");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Auroras boreales en el Caribe. Pasó en 1859.",
+            "Un bosque entero cayó en 1908 sin que nada tocara el suelo.",
+            "Enorme estallido sobre Siberia, el 30 de junio de 1908.",
+            "El bosque de Siberia cayó entero, sin que nada tocara el suelo.",
+            // la cifra central al inicio está permitida por las reglas
+            "80 millones de árboles cayeron en segundos.",
+            "3 de cada 10 árboles cayeron en segundos.",
+            // fuera del rango 1000-2099 o más de 4 cifras: no es un año
+            "999 árboles cayeron en segundos sobre la taiga.",
+            "2100 árboles cayeron en segundos sobre la taiga.",
+            "18590 árboles cayeron en segundos sobre la taiga."})
+    void hookWithTheSurpriseFirst_isNotFlagged(String hook) {
+        scene(draft, 0).put("narrationText", hook);
+        assertThat(codes(validate(), Severity.SOFT)).doesNotContain("HOOK_STARTS_WITH_DATE");
+    }
+
+    @Test
+    void dateStartOutsideTheHook_isNotFlagged() {
+        scene(draft, 2).put("narrationText", "En 1908 " + words(16)); // CONTEXTO, 18 palabras
+        assertThat(validate()).isEmpty();
+    }
+
+    @Test
+    void soft_hookSlowReveal_carrington() {
+        scene(draft, 0).put("visualPrompt", CARRINGTON_HOOK_PROMPT);
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("HOOK_SLOW_REVEAL");
+        assertThat(violations).extracting(Violation::message)
+                .anyMatch(m -> m.contains("'slowly tilting'"))
+                .anyMatch(m -> m.contains("'tilting upward'"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"slowly tilting", "Tilting Upward", "tilt up", "pans to reveal", "pan to reveal", "to reveal",
+            "slowly reveals", "STARTING ON A CALM"})
+    void soft_hookSlowReveal_eachTerm(String term) {
+        scene(draft, 0).put("visualPrompt", ANCHOR + ", one continuous shot over the taiga, " + term + " the burst.");
+        assertOnly(Severity.SOFT, "HOOK_SLOW_REVEAL");
+    }
+
+    @Test
+    void hookFromTheFirstFrame_orRevealOutsideTheHook_isNotFlagged() {
+        scene(draft, 0).put("visualPrompt", ANCHOR + ", one continuous shot. From the very first frame, vivid green auroral "
+                + "curtains fill the night sky above a tropical sea, while the camera keeps tilting gently.");
+        scene(draft, 2).put("visualPrompt", CARRINGTON_HOOK_PROMPT); // CONTEXTO: la regla es solo del GANCHO
+        assertThat(validate()).isEmpty();
+    }
+
+    @Test
+    void soft_absoluteInTitle_carrington() {
+        draft.put("title", "1859: la tormenta solar más intensa jamás registrada");
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("ABSOLUTE_TERM");
+        assertThat(violations).allMatch(v -> v.sceneId() == null && v.message().contains("title"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 2})
+    void soft_absoluteInRealSceneNarration(int index) {
+        String narration = (String) scene(draft, index).get("narrationText");
+        scene(draft, index).put("narrationText", narration.replaceFirst("palabra", "NUNCA")); // mismas palabras
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("ABSOLUTE_TERM");
+        assertThat(violations).allMatch(v -> v.sceneId().equals(scene(draft, index).get("id")));
+    }
+
+    @Test
+    void absolutesInIfScenes_orInsideOtherWords_areNotFlagged() {
+        scene(draft, 3).put("narrationText", "Jamás " + words(14)); // GIRO (IF): la regla es de las escenas 1-3
+        scene(draft, 4).put("narrationText", "nunca " + words(17)); // CONSECUENCIA (IF)
+        scene(draft, 1).put("narrationText", "Jamaica nuncajamás " + words(17)); // no son la palabra completa
+        draft.put("title", "Jamaica bajo la aurora");
+        assertThat(validate()).isEmpty();
+    }
+
     // --- acknowledgeUnverified ----------------------------------------------------------
 
     @Test

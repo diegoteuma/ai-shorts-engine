@@ -41,12 +41,31 @@ public final class DraftValidator {
     private final SourcePolicy sourcePolicy;
     private final Map<String, Pattern> forbiddenTerms;
     private final Map<String, Pattern> negativeTerms;
+    private final Map<String, Pattern> slowRevealTerms;
+    private final Map<String, Pattern> absoluteTerms;
+
+    /**
+     * Narración del GANCHO que abre con la fecha (SOFT): su primer token es
+     * un año de 4 cifras (1000-2099), o empieza con "En <número>", con "En
+     * el año" o con "El <día> de <mes>", ignorando signos de apertura. Abrir
+     * con la cifra central ("80 millones…") está permitido por las reglas y
+     * no avisa. Simple a propósito: no detecta años en palabras ("En mil
+     * ochocientos…") ni "Hace 200 años", y una cifra de 4 dígitos en ese
+     * rango ("2000 kilómetros…") avisa aunque no sea un año.
+     */
+    private static final Pattern HOOK_DATE_START = Pattern.compile(
+            "^[\\s¿¡«\"“']*(?:(?:1\\d{3}|20\\d{2})(?![\\p{L}\\p{N}])|en\\s+\\d|en\\s+el\\s+año(?![\\p{L}\\p{N}])"
+                    + "|el\\s+[\\p{L}\\p{N}]+(?:\\s+y\\s+[\\p{L}\\p{N}]+)?\\s+de\\s+(?:enero|febrero|marzo|abril|mayo|junio"
+                    + "|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?![\\p{L}\\p{N}]))",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     public DraftValidator(DraftsProperties properties, SourcePolicy sourcePolicy) {
         this.properties = properties;
         this.sourcePolicy = sourcePolicy;
         this.forbiddenTerms = compileTerms(properties.forbiddenVisualTerms());
         this.negativeTerms = compileTerms(properties.negativePromptTerms());
+        this.slowRevealTerms = compileTerms(properties.slowRevealTerms());
+        this.absoluteTerms = compileTerms(properties.absoluteTerms());
     }
 
     public List<Violation> validate(StoryDraft draft, Context context) {
@@ -55,6 +74,7 @@ public final class DraftValidator {
         Map<String, Claim> claimsById = DraftRules.claimsById(draft);
 
         validateSlug(draft, context, violations);
+        validateTitleAbsolutes(draft, violations);
         validateScenes(draft, claimsById, violations);
         validateWhatIf(draft, claimsById, violations);
         validateSources(draft, researched, violations);
@@ -78,6 +98,18 @@ public final class DraftValidator {
         if (isBlank(draft.topic) || isBlank(draft.title)) {
             violations.add(Violation.hard("TOPIC_TITLE_MISSING", "Faltan 'topic' o 'title' (la Story los exige)."));
         }
+    }
+
+    // --- SOFT: absolutos en el título -----------------------------------------------------
+
+    private void validateTitleAbsolutes(StoryDraft draft, List<Violation> violations) {
+        String title = draft.title != null ? draft.title : "";
+        absoluteTerms.forEach((term, pattern) -> {
+            if (pattern.matcher(title).find()) {
+                violations.add(Violation.soft("ABSOLUTE_TERM", "El title contiene el absoluto '" + term
+                        + "': solo con una fuente que lo diga literalmente; si no, usar la forma acotada."));
+            }
+        });
     }
 
     // --- HARD y SOFT por escena ------------------------------------------------------------
@@ -195,6 +227,27 @@ public final class DraftValidator {
                 && !prompt.trim().toLowerCase(Locale.ROOT).startsWith(anchor.trim().toLowerCase(Locale.ROOT))) {
             violations.add(Violation.softScene("STYLE_ANCHOR", scene.id, where
                     + ": el visualPrompt no empieza con el ancla de estilo \"" + anchor + "\"."));
+        }
+        String narration = scene.narrationText != null ? scene.narrationText : "";
+        if (role == SceneRole.GANCHO) {
+            if (HOOK_DATE_START.matcher(narration).find()) {
+                violations.add(Violation.softScene("HOOK_STARTS_WITH_DATE", scene.id, where
+                        + ": la narración empieza con una cifra, año o fecha; lo sorprendente debería ir en las primeras 4 palabras."));
+            }
+            slowRevealTerms.forEach((term, pattern) -> {
+                if (pattern.matcher(prompt).find()) {
+                    violations.add(Violation.softScene("HOOK_SLOW_REVEAL", scene.id, where + ": el visualPrompt contiene '"
+                            + term + "'; el elemento clave debería estar en cuadro desde el primer fotograma."));
+                }
+            });
+        }
+        if (DraftRules.isReal(role)) {
+            absoluteTerms.forEach((term, pattern) -> {
+                if (pattern.matcher(narration).find()) {
+                    violations.add(Violation.softScene("ABSOLUTE_TERM", scene.id, where + ": la narración contiene el absoluto '"
+                            + term + "': solo con una fuente que lo diga literalmente; si no, usar la forma acotada."));
+                }
+            });
         }
         return scene.words;
     }

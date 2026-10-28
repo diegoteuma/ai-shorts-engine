@@ -7,6 +7,7 @@ import com.aishorts.engine.clips.HttpClipDownloader;
 import com.aishorts.engine.claude.ClaudeConfig;
 import com.aishorts.engine.difficulty.DefaultSceneDifficultyScorer;
 import com.aishorts.engine.domain.GenerationTier;
+import com.aishorts.engine.duration.ActualDurationChecker;
 import com.aishorts.engine.duration.WordsPerSecondDurationEstimator;
 import com.aishorts.engine.higgsfield.HiggsfieldClient;
 import com.aishorts.engine.higgsfield.HiggsfieldConfig;
@@ -108,6 +109,17 @@ public class EngineConfiguration {
                 WordsPerSecondDurationEstimator.neutralSpanish(),
                 ttsService
         );
+    }
+
+    @Bean
+    ActualDurationChecker actualDurationChecker(
+            @Value("${engine.duration-warnings.min-scene-seconds}") double minSceneSeconds,
+            @Value("${engine.duration-warnings.max-scene-seconds}") double maxSceneSeconds,
+            @Value("${engine.duration-warnings.min-total-seconds}") double minTotalSeconds,
+            @Value("${engine.duration-warnings.max-total-seconds}") double maxTotalSeconds
+    ) {
+        return new ActualDurationChecker(
+                ActualDurationChecker.Limits.ofSeconds(minSceneSeconds, maxSceneSeconds, minTotalSeconds, maxTotalSeconds));
     }
 
     @Bean

@@ -223,6 +223,57 @@ class SceneTest {
         assertThat(scene.narrationText()).isEqualTo("otra narración");
     }
 
+    @Test
+    void updateNarration_withNewText_discardsTheApprovedCost_andPuerta2CannotApproveItAgain() {
+        Scene scene = newScene();
+        scene.proposeTier(new TierRecommendation(GenerationTier.STANDARD, 40, "test"));
+        scene.approvePrompt();
+        scene.attachNarrationAudio("audio/scene-1.mp3", Duration.ofSeconds(9));
+        scene.recordCostEstimate(estimate("0.35"), "higgsfield-ai/soul/standard");
+        scene.approveCost();
+
+        scene.updateNarration("narración más corta", Duration.ofSeconds(6));
+
+        assertThat(scene.costStatus()).isEqualTo(SceneCostStatus.NOT_ESTIMATED);
+        assertThat(scene.costEstimate()).isNull();
+        assertThat(scene.chosenModelId()).isNull();
+        assertThat(scene.needsCostEstimate()).isTrue();
+        assertThat(scene.isReadyToGenerate()).isFalse();
+        assertThatIllegalStateException().isThrownBy(scene::approveCost);
+        assertThat(scene.isPromptApproved()).isTrue(); // la PUERTA 1 sigue aprobada
+    }
+
+    @Test
+    void updateNarration_withTheSameText_keepsAudioAndCost() {
+        Scene scene = newScene();
+        scene.proposeTier(new TierRecommendation(GenerationTier.STANDARD, 40, "test"));
+        scene.approvePrompt();
+        scene.attachNarrationAudio("audio/scene-1.mp3", Duration.ofSeconds(7));
+        scene.recordCostEstimate(estimate("0.35"), "higgsfield-ai/soul/standard");
+        scene.approveCost();
+
+        scene.updateNarration("narración de prueba", Duration.ofSeconds(5));
+
+        assertThat(scene.hasNarrationAudio()).isTrue();
+        assertThat(scene.isCostApproved()).isTrue();
+    }
+
+    @Test
+    void updateNarration_afterGenerationStarted_isRejected_andChangesNothing() {
+        Scene scene = completedScene();
+
+        assertThatIllegalStateException().isThrownBy(() -> scene.updateNarration("otra narración", Duration.ofSeconds(4)))
+                .withMessageContaining("reset-generation");
+        assertThat(scene.narrationText()).isEqualTo("narración de prueba");
+        assertThat(scene.targetDuration()).isEqualTo(Duration.ofSeconds(7));
+        assertThat(scene.hasNarrationAudio()).isTrue();
+        assertThat(scene.isCostApproved()).isTrue();
+
+        scene.resetForRegeneration();
+        scene.updateNarration("otra narración", Duration.ofSeconds(4));
+        assertThat(scene.narrationText()).isEqualTo("otra narración");
+    }
+
     // --- resetForRegeneration ------------------------------------------------------------
 
     private static Scene completedScene() {

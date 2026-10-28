@@ -73,14 +73,24 @@ public final class Scene {
      *
      * Si el texto cambia, el audio ya sintetizado (si lo había) deja de
      * corresponderle: se descarta para que /narration lo vuelva a sintetizar.
+     * También se descarta el costo (estimado o aprobado): se calculó con la
+     * duración anterior y /generate pide el clip con la nueva. Como en
+     * approvePrompt, se rechaza si la generación ya arrancó.
      */
     public void updateNarration(String narrationText, Duration targetDuration) {
         Objects.requireNonNull(narrationText, "narrationText");
+        Objects.requireNonNull(targetDuration, "targetDuration");
         if (!narrationText.equals(this.narrationText)) {
+            if (generationStatus != GenerationStatus.NOT_STARTED) {
+                throw new IllegalStateException(
+                        "La escena '" + id + "' ya tiene generación (estado: " + generationStatus
+                                + "); para revisar su narración primero usá reset-generation.");
+            }
             this.narrationAudioPath = null;
+            discardCost();
         }
         this.narrationText = narrationText;
-        this.targetDuration = Objects.requireNonNull(targetDuration, "targetDuration");
+        this.targetDuration = targetDuration;
     }
 
     // --- Puerta 1: propuesta y aprobación de prompt -------------------------------------
@@ -118,10 +128,7 @@ public final class Scene {
                         "La escena '" + id + "' ya tiene generación (estado: " + generationStatus
                                 + "); para revisar su prompt o tier primero usá reset-generation.");
             }
-            this.costStatus = SceneCostStatus.NOT_ESTIMATED;
-            this.costEstimate = null;
-            this.costRejectionNote = null;
-            this.chosenModelId = null;
+            discardCost();
         }
         if (revisedVisualPrompt != null && !revisedVisualPrompt.isBlank()) {
             this.visualPrompt = revisedVisualPrompt;
@@ -275,10 +282,7 @@ public final class Scene {
                     "No se puede resetear la escena " + id + " con generación en curso (estado=" + generationStatus
                             + ", requestId=" + higgsfieldRequestId + "): espera a que termine con poll-generation.");
         }
-        this.costStatus = SceneCostStatus.NOT_ESTIMATED;
-        this.costEstimate = null;
-        this.costRejectionNote = null;
-        this.chosenModelId = null;
+        discardCost();
         this.generationStatus = GenerationStatus.NOT_STARTED;
         this.higgsfieldRequestId = null;
         this.higgsfieldStatusUrl = null;
@@ -287,6 +291,14 @@ public final class Scene {
         // El archivo en disco lo borra quien llama (ClipStore): Scene no hace E/S.
         this.localClipPath = null;
         this.localClipFailureReason = null;
+    }
+
+    /** Vuelve el costo a NOT_ESTIMATED: hay que estimarlo y aprobarlo de nuevo en la PUERTA 2. */
+    private void discardCost() {
+        this.costStatus = SceneCostStatus.NOT_ESTIMATED;
+        this.costEstimate = null;
+        this.costRejectionNote = null;
+        this.chosenModelId = null;
     }
 
     // --- guards ------------------------------------------------------------------------

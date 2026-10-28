@@ -26,6 +26,8 @@ public record DraftsProperties(
         String styleAnchor,
         List<String> forbiddenVisualTerms,
         List<String> negativePromptTerms,
+        List<String> slowRevealTerms,
+        List<String> absoluteTerms,
         List<String> tierADomains,
         List<String> tierBDomains,
         List<String> orientationOnlyDomains
@@ -51,6 +53,8 @@ public record DraftsProperties(
         sceneWordRanges = sceneWordRanges != null ? sceneWordRanges : Map.of();
         forbiddenVisualTerms = forbiddenVisualTerms != null ? forbiddenVisualTerms : List.of();
         negativePromptTerms = negativePromptTerms != null ? negativePromptTerms : List.of();
+        slowRevealTerms = slowRevealTerms != null ? slowRevealTerms : List.of();
+        absoluteTerms = absoluteTerms != null ? absoluteTerms : List.of();
         tierADomains = tierADomains != null ? tierADomains : List.of();
         tierBDomains = tierBDomains != null ? tierBDomains : List.of();
         orientationOnlyDomains = orientationOnlyDomains != null ? orientationOnlyDomains : List.of();
