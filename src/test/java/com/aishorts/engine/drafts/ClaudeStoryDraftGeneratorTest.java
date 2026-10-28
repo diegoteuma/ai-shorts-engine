@@ -125,6 +125,37 @@ class ClaudeStoryDraftGeneratorTest {
         }
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void pauseTurn_serverToolUseWithInputInStartAndNoDeltas_doesNotFail_andIsResentIntact() throws IOException {
+        // índice 2: server_tool_use con el input completo en content_block_start y sin deltas
+        respond(200, """
+                {"stop_reason":"pause_turn","container":{"id":"cont_1"},
+                 "usage":{"input_tokens":100,"output_tokens":10,"server_tool_use":{"web_search_requests":1}},
+                 "content":[
+                  {"type":"text","text":"Voy a buscar. "},
+                  {"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"tunguska"}},
+                  {"type":"server_tool_use","id":"srvtoolu_2","name":"code_execution","_inputInStart":true,
+                   "input":{"code":"print(len(results))","nested":{"a":[1,2],"b":null}},"campo_futuro":"F1"}
+                 ]}""");
+        respond(200, """
+                {"stop_reason":"end_turn","usage":{"input_tokens":200,"output_tokens":50},
+                 "content":[{"type":"text","text":"{}"}]}""");
+
+        GeneratorResult result = generator().generate(draftRequest());
+
+        assertThat(result.stopReason()).isEqualTo("end_turn");
+        List<Map<String, Object>> messages = (List<Map<String, Object>>) receivedRequests.get(1).get("messages");
+        List<Object> resent = (List<Object>) messages.get(1).get("content");
+        assertThat(resent).hasSize(3);
+        Map<String, Object> expected = objectMapper.readValue("""
+                {"type":"server_tool_use","id":"srvtoolu_2","name":"code_execution",
+                 "input":{"code":"print(len(results))","nested":{"a":[1,2],"b":null}},"campo_futuro":"F1"}""", Map.class);
+        assertKeptIntact(expected, resent.get(2), "content[2]");
+        assertThat(((Map<String, Object>) resent.get(2)).get("input")).isEqualTo(expected.get("input")); // ni una clave de más
+        assertKeptIntact(Map.of("input", Map.of("query", "tunguska")), resent.get(1), "content[1]");
+    }
+
     /** Todo lo que trae {@code original} está en {@code resent} con el mismo valor (puede haber campos de más). */
     private static void assertKeptIntact(Object original, Object resent, String path) {
         if (original instanceof Map<?, ?> o) {
@@ -391,6 +422,12 @@ class ClaudeStoryDraftGeneratorTest {
                             "delta", Map.of("type", "text_delta", "text", piece)));
                     event(sse, "ping", Map.of("type", "ping"));
                 }
+            } else if ("server_tool_use".equals(type) && Boolean.TRUE.equals(block.get("_inputInStart"))) {
+                // Marca solo del test: el input completo en el start y SIN input_json_delta (lo que
+                // rompía MessageAccumulator con "Missing input JSON for index N").
+                Map<String, Object> full = new java.util.LinkedHashMap<>(block);
+                full.remove("_inputInStart");
+                event(sse, "content_block_start", Map.of("type", "content_block_start", "index", i, "content_block", full));
             } else if ("server_tool_use".equals(type)) {
                 Map<String, Object> base = new java.util.LinkedHashMap<>(block);
                 base.put("input", Map.of());
