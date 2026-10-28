@@ -474,13 +474,30 @@ GET    /stories                         listar todas: {id, title, topic, progres
 GET    /stories/{id}                    ver el estado completo de una
 POST   /stories/{id}/tiers              proposeTiersForReview
 POST   /stories/{id}/prompt-decisions   applyPromptDecisions   (PUERTA 1)
-POST   /stories/{id}/narration          synthesizeNarrationForApprovedScenes
-POST   /stories/{id}/cost-estimates     estimateCostsForApprovedScenes
+POST   /stories/{id}/narration          synthesizeNarrationForApprovedScenes (+ durationWarnings)
+POST   /stories/{id}/cost-estimates     estimateCostsForApprovedScenes       (+ durationWarnings)
 POST   /stories/{id}/cost-decisions     applyCostDecisions     (PUERTA 2)
 POST   /stories/{id}/generate           generateApprovedScenes
 POST   /stories/{id}/poll-generation    pollGenerationStatus
 POST   /stories/{id}/reset-generation   resetAllScenesForRegeneration / resetScenesForRegeneration
 ```
+
+**Avisos de duración real.** Las reglas del generador solo pueden contar
+palabras; la duración real recién existe cuando `/narration` sintetiza el
+audio. Por eso `/narration` y `/cost-estimates` agregan a la respuesta
+(`succeededSceneIds`, `failedSceneIds`, `story`, sin cambios) un campo
+`durationWarnings`: lista de `{sceneId, actualSeconds, limitSeconds, kind}`
+con `kind` = `SCENE_TOO_LONG`, `SCENE_TOO_SHORT`, `TOTAL_TOO_LONG` o
+`TOTAL_TOO_SHORT` (`sceneId` es null en los del total). Límites inclusivos
+(8,000 s no avisa; 8,001 s sí). Solo cuentan las escenas con audio; el total
+se evalúa solo cuando todas lo tienen. **No bloquea nada**: es para verlo
+antes de la PUERTA 2. Para acortar, reaprobar el prompt en la PUERTA 1 con
+`revisedNarrationText` y volver a llamar a `/narration` y `/cost-estimates`.
+Cambiar el texto de la narración descarta el audio **y el costo** (estimado
+o aprobado) de esa escena, porque `/generate` pide el clip con la duración
+nueva: hay que volver a estimarlo y aprobarlo en la PUERTA 2. Si la
+generación de esa escena ya arrancó, la revisión se rechaza (usar
+`reset-generation` primero), igual que al revisar el prompt.
 
 El endpoint `poll-generation` tapa un hueco real que encontré armando esto:
 `generateApprovedScenes` solo dispara la generación en Higgsfield y deja la
@@ -529,7 +546,9 @@ Opcionales (con default): `API_PORT` (8080, mapeado a `server.port` en
 `application.yml`), `DATA_DIR` (`./data/stories`), `AUDIO_DIR`
 (`./data/audio`), `CLIPS_DIR` (`./data/clips`), `CLIP_MAX_BYTES` (64 MiB),
 `CLIP_DOWNLOAD_TIMEOUT_SECONDS` (120), `CLIP_MIN_FREE_BYTES` (512 MiB),
-`CLAUDE_MODEL` (`claude-sonnet-5-5`), las del video final (ver "Video
+`DURATION_MIN_SCENE_SECONDS` (3), `DURATION_MAX_SCENE_SECONDS` (8),
+`DURATION_MIN_TOTAL_SECONDS` (35), `DURATION_MAX_TOTAL_SECONDS` (40) (límites
+de `durationWarnings`, ver abajo), `CLAUDE_MODEL` (`claude-sonnet-5-5`), las del video final (ver "Video
 final" arriba; deshabilitado por defecto) y las del generador
 de historias (ver "Generador de historias" arriba). Esto resuelve, de la forma más simple posible, el
 pendiente de "manejo de credenciales" — variables de entorno alcanzan para

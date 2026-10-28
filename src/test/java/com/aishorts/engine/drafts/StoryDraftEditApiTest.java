@@ -43,7 +43,10 @@ class StoryDraftEditApiTest extends DraftApiTestSupport {
         assertThat(scenes.get(0).get("narrationText")).isEqualTo(NEW_HOOK);
         assertThat(scenes.get(0).get("words")).isEqualTo(12);
         assertThat(scenes.get(3).get("visualPrompt")).isEqualTo(newPrompt);
-        assertThat((List<?>) stored.get("violations")).isEmpty();
+        // NEW_HOOK dice "jamás": solo el aviso SOFT de absolutos, que no bloquea la aprobación de abajo.
+        assertThat((List<Map<String, Object>>) stored.get("violations"))
+                .extracting(v -> v.get("code") + "/" + v.get("severity"))
+                .containsExactly("ABSOLUTE_TERM/SOFT");
 
         ResponseEntity<Map> approved = post("/story-drafts/" + ID + "/decision",
                 Map.of("decision", "APPROVE", "acknowledgeUnverified", true));

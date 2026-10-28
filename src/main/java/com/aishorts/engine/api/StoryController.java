@@ -9,6 +9,7 @@ import com.aishorts.engine.clips.ClipSyncResult;
 import com.aishorts.engine.difficulty.DifficultyFactors;
 import com.aishorts.engine.domain.Story;
 import com.aishorts.engine.domain.StoryIds;
+import com.aishorts.engine.duration.ActualDurationChecker;
 import com.aishorts.engine.drafts.StoryIndex;
 import com.aishorts.engine.persistence.SnapshotMapper;
 import com.aishorts.engine.persistence.StoryRepository;
@@ -52,7 +53,8 @@ import java.util.UUID;
  * POST   /stories/{id}/tiers              proposeTiersForReview
  * POST   /stories/{id}/prompt-decisions   applyPromptDecisions   (PUERTA 1)
  * POST   /stories/{id}/narration          synthesizeNarrationForApprovedScenes
- * POST   /stories/{id}/cost-estimates     estimateCostsForApprovedScenes
+ *                                          + "durationWarnings": duración real fuera de las reglas (solo aviso)
+ * POST   /stories/{id}/cost-estimates     estimateCostsForApprovedScenes (+ "durationWarnings")
  * POST   /stories/{id}/cost-decisions     applyCostDecisions     (PUERTA 2)
  * POST   /stories/{id}/generate           generateApprovedScenes
  * POST   /stories/{id}/poll-generation    pollGenerationStatus  (llamar seguido hasta que termine)
@@ -74,6 +76,7 @@ public class StoryController {
     private final Path narrationAudioDir;
     private final StoryIndex storyIndex;
     private final ClipStore clipStore;
+    private final ActualDurationChecker durationChecker;
 
     public StoryController(
             StoryApprovalService approvalService,
@@ -81,7 +84,8 @@ public class StoryController {
             StoryRepository repository,
             @Qualifier("narrationAudioDir") Path narrationAudioDir,
             StoryIndex storyIndex,
-            ClipStore clipStore
+            ClipStore clipStore,
+            ActualDurationChecker durationChecker
     ) {
         this.approvalService = approvalService;
         this.draftingService = draftingService;
@@ -89,6 +93,7 @@ public class StoryController {
         this.narrationAudioDir = narrationAudioDir;
         this.storyIndex = storyIndex;
         this.clipStore = clipStore;
+        this.durationChecker = durationChecker;
     }
 
     /**
@@ -143,7 +148,9 @@ public class StoryController {
         Story story = loadOrNotFound(id);
         BatchResult result = approvalService.synthesizeNarrationForApprovedScenes(story, narrationAudioDir);
         repository.save(story);
-        return batchResponse(result, story);
+        Map<String, Object> response = batchResponse(result, story);
+        response.put("durationWarnings", durationWarnings(story));
+        return response;
     }
 
     @PostMapping("/{id}/cost-estimates")
@@ -151,7 +158,9 @@ public class StoryController {
         Story story = loadOrNotFound(id);
         BatchResult result = approvalService.estimateCostsForApprovedScenes(story);
         repository.save(story);
-        return batchResponse(result, story);
+        Map<String, Object> response = batchResponse(result, story);
+        response.put("durationWarnings", durationWarnings(story));
+        return response;
     }
 
     @PostMapping("/{id}/cost-decisions")
@@ -204,6 +213,17 @@ public class StoryController {
     private Story loadOrNotFound(String storyId) {
         return repository.findById(storyId)
                 .orElseThrow(() -> new ApiError(404, "No existe una historia con id '" + storyId + "'."));
+    }
+
+    /**
+     * Solo cuentan las escenas con audio: sin él, targetDuration sigue siendo
+     * la estimación por palabras, no la duración real.
+     */
+    private List<ActualDurationChecker.Warning> durationWarnings(Story story) {
+        List<ActualDurationChecker.SceneDuration> durations = story.scenes().stream()
+                .map(s -> new ActualDurationChecker.SceneDuration(s.id(), s.hasNarrationAudio() ? s.targetDuration() : null))
+                .toList();
+        return durationChecker.check(durations);
     }
 
     private Map<String, Object> clipsResponse(ClipSyncResult clips) {

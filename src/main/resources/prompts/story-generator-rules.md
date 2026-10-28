@@ -29,7 +29,7 @@ Un buen tema cumple **todo** esto:
 
 ## 4. Estructura fija: 6 escenas, en este orden
 
-`role` exacto (sin tildes) y `order` 1-6. Presupuesto de ritmo: **~2.65 palabras por segundo**; las fechas y cifras tardan más.
+`role` exacto (sin tildes) y `order` 1-6. Presupuesto de ritmo: **~2.65 palabras por segundo**; las fechas y cifras tardan más, y también las palabras largas o técnicas (medido: hasta 1.84 palabras/s en una escena con "transformadores eléctricos"). En una escena con varias palabras largas, apunta al mínimo de su rango de palabras.
 
 | order | role | Función | Duración | Palabras |
 |---|---|---|---|---|
@@ -42,7 +42,7 @@ Un buen tema cumple **todo** esto:
 
 Reglas duras: **total entre 92 y 104 palabras**; ninguna escena de más de 8 s (~21 palabras) ni de menos de 3 s; una idea por escena. Escenas 1-3 son REAL, 4-5 son IF, 6 cierra.
 
-**GANCHO.** Empieza por lo más concreto y sorprendente del hecho real, con su cifra o su dato central, en una frase corta. Prohibido abrir con "¿Sabías que…?", con adjetivos vacíos ("increíble", "impactante") o con una promesa que el video no cumple. No uses una cifra más llamativa que la documentada.
+**GANCHO.** Empieza por lo más concreto y sorprendente del hecho real, con su cifra o su dato central, en una frase corta. El elemento sorprendente o anómalo (lo que contradice lo esperado, o la cifra central) va en las **primeras 4 palabras**: los subtítulos se muestran en grupos de hasta 4 palabras. No empieces con la fecha, el año ni el lugar; la fecha va después. Malo: "En 1859, una aurora boreal se vio en el Caribe" (el primer grupo es "En 1859, una aurora"). Bueno: "Auroras boreales en el Caribe. Pasó en 1859." Prohibido abrir con "¿Sabías que…?", con adjetivos vacíos ("increíble", "impactante") o con una promesa que el video no cumple. No uses una cifra más llamativa que la documentada.
 
 **GIRO.** Debe contener una marca inequívoca de hipótesis ("Ahora imaginemos…", "¿Y si…?") y plantear **una sola** variable cambiada. A partir de aquí todo el lenguaje va en condicional ("habría", "podría").
 
@@ -77,7 +77,7 @@ Reglas:
 
 1. **Cifras clave** (las que aparecen en la narración o el título): mínimo **2 fuentes independientes** tier A/B, de dominios distintos. Si solo hay una, marca `confidence: BAJA` y avísalo en `risks`.
 2. **Cifra discutida o con rango**: usa el rango o una fórmula honesta ("unos", "se estima", "entre X y Y"). Nunca redondees hacia arriba por impacto ni quites la incertidumbre. Ejemplo de cuidado: una cifra famosa como "80 millones de árboles" en Tunguska es una **estimación**, no una medición; si la usas, enmárcala como estimación y respáldala con fuentes.
-3. **Superlativos** ("el mayor", "el primero", "el único"): solo con fuente directa; si no, quítalos.
+3. **Superlativos** ("el mayor", "el primero", "el único"): solo con fuente directa; si no, quítalos. Los absolutos cuentan como superlativos: "jamás", "nunca", "siempre", "todo/toda", "continentes enteros" y las exageraciones geográficas ("cerca del ecuador"). Solo con una fuente que lo diga literalmente; si no, usa la forma acotada ("la más fuerte conocida", "a latitudes tropicales"). Aplica también al `title`.
 4. **Si no puedes verificarlo, no lo incluyas.** No rellenes con lo que "suena bien".
 5. **Tienes búsqueda web.** Úsala para respaldar cada cifra, fecha, lugar y nombre propio de las escenas 1-3. Cita solo URLs de páginas que realmente consultaste en esta sesión: el sistema comprueba que cada URL aparezca entre los resultados de búsqueda. Nunca inventes fuentes ni URLs. Si no pudiste respaldar una afirmación, escribe `"url": null` y `"status": "SIN_VERIFICAR"`. Pon `checks.sourcesVerified = true` solo si todas las afirmaciones de las escenas 1-3 quedaron `VERIFICADO`.
 6. Fechas, lugares y nombres propios se verifican siempre.
@@ -107,7 +107,7 @@ Un prompt por escena para un modelo de **texto a video** (Wan 3.0 Prime u otro),
 9. **Evita palabras que activan clichés**. En una explosión aérea, por ejemplo, *impact, crash, crater, mushroom cloud, ground blast*: los modelos tienden a dibujar la explosión contra el suelo con hongo. Describe lo que sí pasa ("detonates high in the sky", "pressure wave sweeping outward across the canopy").
 10. Debe **coincidir con la narración** del momento: no ilustres otra cosa.
 11. Criterio por rol:
-    - GANCHO: la imagen más potente del resultado, cinematográfica.
+    - GANCHO: la imagen más potente del resultado, cinematográfica. El **primer fotograma ya muestra el elemento clave** en su momento de mayor impacto. Prohibido abrir con un plano tranquilo y llegar al elemento por panorámica, inclinación o revelación (*tilt up to reveal, pan to reveal, slowly reveals, starting on a calm…*). El movimiento de cámara puede continuar, pero el sujeto está en cuadro desde el inicio; escríbelo como *"From the very first frame, …"*.
     - EXPLICACION: el mecanismo físico en imagen real y verosímil (no diagrama).
     - CONTEXTO: lugar y época, sereno; un look de archivo histórico es válido si dice *photorealistic*.
     - GIRO: un plano establecido del escenario hipotético; evita morphing y pantalla dividida (los modelos suelen resolverlos mal).
@@ -194,6 +194,6 @@ Modo PROPUESTAS: devuelve solo JSON válido con la forma `{ "candidates": [ { "t
 4. ¿Cifras clave con 2 fuentes tier A/B, o marcadas como BAJA o SIN_VERIFICAR?
 5. ¿Alguna cifra redondeada hacia arriba, superlativo sin fuente o URL que no consultaste?
 6. ¿Hipótesis marcada en el GIRO y en condicional en la CONSECUENCIA?
-7. ¿Cada `visualPrompt` en inglés, en positivo, de una sola toma, con ≤3 eventos, con el ancla de estilo, sin palabras-cliché y con su física respetada?
+7. ¿Cada `visualPrompt` en inglés, en positivo, de una sola toma, con ≤3 eventos, con el ancla de estilo, sin palabras-cliché y con su física respetada? ¿El del GANCHO muestra el elemento clave desde el primer fotograma, sin plano tranquilo inicial ni revelación?
 8. ¿Tema distinto de `existingStories`?
 9. ¿JSON válido, sin texto extra?
