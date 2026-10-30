@@ -180,8 +180,8 @@ POST /story-drafts/proposals        {focus?}  -> 5 temas candidatos (no guarda n
 POST /story-drafts                  {topic, rejectedDraftId?}  -> borrador PENDING_REVIEW en data/drafts/<id>.json
 GET  /story-drafts                  resumen (id, título, tema, status, # violaciones duras/blandas)
 GET  /story-drafts/{id}             borrador completo (claims, fuentes, what-if, violaciones, researchedUrls, usage)
-PATCH /story-drafts/{id}            {title?, narrationEdits?, promptEdits?} -> edita a mano un PENDING_REVIEW, recalcula y revalida (sin Claude)
-POST /story-drafts/{id}/decision    PUERTA 0: {decision: APPROVE|REJECT, note?, narrationEdits?, promptEdits?, acknowledgeUnverified?}
+PATCH /story-drafts/{id}            {title?, hookText?, narrationEdits?, promptEdits?} -> edita a mano un PENDING_REVIEW, recalcula y revalida (sin Claude)
+POST /story-drafts/{id}/decision    PUERTA 0: {decision: APPROVE|REJECT, note?, hookText?, narrationEdits?, promptEdits?, acknowledgeUnverified?}
          │
          └─ APPROVE -> Story nueva en data/stories (= POST /stories) -> POST /stories/{id}/tiers -> ...
 ```
@@ -481,7 +481,24 @@ POST   /stories/{id}/cost-decisions     applyCostDecisions     (PUERTA 2)
 POST   /stories/{id}/generate           generateApprovedScenes
 POST   /stories/{id}/poll-generation    pollGenerationStatus
 POST   /stories/{id}/reset-generation   resetAllScenesForRegeneration / resetScenesForRegeneration
+POST   /stories/{id}/clip-offsets       {"<sceneId>": segundos} -> desde qué segundo del clip local se muestra cada escena
 ```
+
+**Gancho: texto en pantalla y margen de arranque.** El borrador trae
+`hookText` (2-5 palabras con la anomalía o la cifra central; aviso SOFT si
+falta o se sale del rango) y pasa a la `Story` al aprobar; `video-renderer`
+lo dibuja arriba desde el fotograma 0 hasta el fin del GANCHO. El modelo de
+video arranca tranquilo y llega al pico a los ~2 s (tunguska, n = 1), así que
+**solo para el GANCHO** se le pide a Higgsfield `ceil(targetDuration +
+HOOK_LEAD_SECONDS)` (default 3, `engine.hook.lead-seconds`; respeta la
+`DurationPolicy` del modelo y el costo de la PUERTA 2 ya lo incluye) y la
+escena queda con `clipStartOffset` = ese margen. Después de ver el clip,
+`clip-offsets` ajusta el corte: todo o nada; 400 si el cuerpo, la escena o el
+número no sirven; 409 si la escena no tiene clip local o si su video final se
+está renderizando; 422 si `offset + targetDuration` supera la duración del
+clip (la de su pista de video según la caja `mdhd`, leída por `Mp4Probe`).
+`reset-generation` vuelve el corte a 0. Las historias guardadas antes de
+estos campos se leen con `hookText` null y `clipStartOffset` 0.
 
 **Avisos de duración real.** Las reglas del generador solo pueden contar
 palabras; la duración real recién existe cuando `/narration` sintetiza el

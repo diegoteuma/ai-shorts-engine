@@ -8,5 +8,10 @@ import java.util.List;
  * {@link SceneSnapshot} para por qué esto es un record separado y no la
  * Story misma.
  */
-public record StorySnapshot(String id, String topic, String title, List<SceneSnapshot> scenes) {
+public record StorySnapshot(String id, String topic, String title, String hookText, List<SceneSnapshot> scenes) {
+
+    /** Sin hookText (null), como las historias anteriores a ese campo. */
+    public StorySnapshot(String id, String topic, String title, List<SceneSnapshot> scenes) {
+        this(id, topic, title, null, scenes);
+    }
 }

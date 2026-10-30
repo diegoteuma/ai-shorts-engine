@@ -5,13 +5,18 @@ import com.aishorts.engine.approval.Decision;
 import java.util.List;
 import java.util.Objects;
 
-/** Tu decisión en la PUERTA 0 sobre un borrador, con las ediciones opcionales de narración y prompt visual. */
+/**
+ * Tu decisión en la PUERTA 0 sobre un borrador, con las ediciones opcionales
+ * de narración, prompt visual y texto en pantalla del gancho (hookText; null
+ * = no se cambia).
+ */
 public record DraftDecision(
         Decision decision,
         String note,
         List<SceneTextEdit> narrationEdits,
         List<SceneTextEdit> promptEdits,
-        boolean acknowledgeUnverified
+        boolean acknowledgeUnverified,
+        String hookText
 ) {
     public DraftDecision {
         Objects.requireNonNull(decision, "decision");

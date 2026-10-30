@@ -88,6 +88,38 @@ class JsonFileStoryRepositoryTest {
         assertThat(story.id()).isEqualTo("tunguska");
         assertThat(story.scenes()).hasSize(6);
         assertThat(repo.findAll()).extracting(Story::id).containsExactly("tunguska");
+        // tunguska.json es anterior a hookText y a clipStartOffset: se leen como null y 0.
+        assertThat(Files.readString(base.resolve("tunguska.json"))).doesNotContain("hookText").doesNotContain("clipStartOffset");
+        assertThat(story.hookText()).isNull();
+        assertThat(story.scenes()).allMatch(s -> s.clipStartOffset() == 0.0);
+    }
+
+    @Test
+    void hookTextAndClipStartOffsetRoundTrip() {
+        JsonFileStoryRepository repo = new JsonFileStoryRepository(tmp.resolve("stories"), mapper);
+        Scene scene = new Scene("h-gancho", SceneRole.GANCHO, 1, "narración", "prompt", Duration.ofSeconds(4));
+        scene.setClipStartOffset(2.75);
+        repo.save(new Story("h", "tema", "título", "EXPLOSIÓN SIN CRÁTER", List.of(scene)));
+
+        Story loaded = repo.findById("h").orElseThrow();
+
+        assertThat(loaded.hookText()).isEqualTo("EXPLOSIÓN SIN CRÁTER");
+        assertThat(loaded.scenes().get(0).clipStartOffset()).isEqualTo(2.75);
+    }
+
+    @Test
+    void aNonNumericClipStartOffsetFailsLoudly() throws IOException {
+        Path base = tmp.resolve("stories");
+        Files.createDirectories(base);
+        String json = mapper.writeValueAsString(SnapshotMapper.toMap(story("roto", "x").toSnapshot()))
+                .replace("\"clipStartOffset\":0.0", "\"clipStartOffset\":\"tres\"");
+        assertThat(json).contains("\"tres\"");
+        Files.writeString(base.resolve("roto.json"), json);
+        JsonFileStoryRepository repo = new JsonFileStoryRepository(base, mapper);
+
+        assertThatThrownBy(() -> repo.findById("roto"))
+                .isInstanceOf(PersistenceException.class)
+                .hasMessageContaining("clipStartOffset");
     }
 
     private static Story story(String id, String title) {

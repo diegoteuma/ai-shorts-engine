@@ -51,6 +51,14 @@ engine:
   # Copia local de los clips de Higgsfield (se guardan cuando poll-generation deja
   # TODAS las escenas COMPLETED). El directorio se crea al descargar el primer clip.
   clips-dir: ${CLIPS_DIR:./data/clips}
+  # Margen de arranque del GANCHO, en segundos: a Higgsfield se le pide
+  # ceil(targetDuration + lead-seconds) solo para esa escena (respetando la DurationPolicy del
+  # modelo) y el clip se muestra desde ese segundo (Scene.clipStartOffset, ajustable con
+  # POST /stories/{id}/clip-offsets). Motivo: el modelo arranca tranquilo y llega al pico a los
+  # ~2 s (medido en tunguska, n = 1). Cuesta lead-seconds x tarifa por video (con 0,14 USD/s,
+  # ~0,42 USD; tarifa SIN VERIFICAR, ver KnownHiggsfieldPricing). 0 = sin margen.
+  hook:
+    lead-seconds: ${HOOK_LEAD_SECONDS:3}
   # Avisos de duración REAL (la del audio de TTS) en la respuesta de POST /stories/{id}/narration
   # y /cost-estimates (campo durationWarnings). Solo avisan, no bloquean nada. Defaults: los de
   # las reglas del generador (escena 3-8 s, total 35-40 s). Límites inclusivos, en segundos.
@@ -160,6 +168,9 @@ app:
     # llega al elemento clave por panorámica/inclinación. Lista cerrada, misma búsqueda por palabra completa.
     slow-reveal-terms: ["slowly tilting", "tilting upward", "tilt up", "pans to reveal", "pan to reveal", "to reveal",
                         "slowly reveals", "starting on a calm"]
+    # Solo advertencia (SOFT), en el visualPrompt del GANCHO: describe el "después" (las consecuencias)
+    # en vez del evento en su pico. Lista cerrada y corta, misma búsqueda por palabra completa.
+    hook-aftermath-terms: [aftermath, devastated, flattened, ruins, "remains of", "already fallen"]
     # Solo advertencia (SOFT), en el title y en la narración de las escenas 1-3: absolutos que
     # necesitan una fuente que lo diga literalmente (sección 6 de las reglas).
     absolute-terms: [jamás, nunca]

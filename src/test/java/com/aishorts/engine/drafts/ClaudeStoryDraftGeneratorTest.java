@@ -303,7 +303,7 @@ class ClaudeStoryDraftGeneratorTest {
         return new DraftsProperties(p.dir(), p.rulesResource(), p.webSearch(), seconds, p.maxPauseContinuations(), p.maxTokens(),
                 p.wordsPerSecond(), p.minTotalWords(), p.maxTotalWords(), p.minSceneSeconds(), p.maxSceneSeconds(),
                 p.sceneWordRanges(), p.styleAnchor(), p.forbiddenVisualTerms(), p.negativePromptTerms(),
-                p.slowRevealTerms(), p.absoluteTerms(), p.tierADomains(), p.tierBDomains(), p.orientationOnlyDomains());
+                p.slowRevealTerms(), p.hookAftermathTerms(), p.absoluteTerms(), p.tierADomains(), p.tierBDomains(), p.orientationOnlyDomains());
     }
 
     @Test

@@ -12,7 +12,7 @@ import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildComposition, DEFAULT_GSAP_SRC } from "./build.mjs";
-import { loadStory } from "./story.mjs";
+import { clipFitError, loadStory } from "./story.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..");
@@ -133,12 +133,22 @@ async function main() {
     if (!args["no-check-media"]) {
       const c = probe(clip);
       const a = probe(audio);
+      // Con clipStartOffset > 0 que el clip alcance no es un aviso sino una condición: sin medirlo no se genera.
+      // Va antes del "continue" de abajo: no depende de que ffprobe pueda leer el audio.
+      const offset = s.clipStartOffset;
+      if (offset > 0) {
+        if (!c || !Number.isFinite(c.duration)) {
+          throw new Error(`${s.id}: tiene clipStartOffset ${offset.toFixed(3)} s y no se pudo medir la duración del clip con ffprobe para comprobar que alcanza (--no-check-media saltea la comprobación).`);
+        }
+        const error = clipFitError(s, c.duration);
+        if (error) throw new Error(error);
+      }
       if (!c || !a) {
         mediaChecks.push({ scene: s.id, skipped: "ffprobe no disponible o falló" });
         continue;
       }
-      const check = { scene: s.id, sceneDuration: s.duration, clipDuration: c.duration, clipSize: `${c.width}x${c.height}`, audioHeaderDuration: a.duration };
-      if (c.duration < s.duration - 0.001) {
+      const check = { scene: s.id, sceneDuration: s.duration, clipStartOffset: offset, clipDuration: c.duration, clipSize: `${c.width}x${c.height}`, audioHeaderDuration: a.duration };
+      if (offset === 0 && c.duration < s.duration - 0.001) {
         warnings.push(`${s.id}: el clip dura ${c.duration.toFixed(3)} s, menos que la escena (${s.duration.toFixed(3)} s). Se desconoce cómo lo trata HyperFrames; revisar el resultado.`);
       }
       if (c.width !== options.width || c.height !== options.height) {

@@ -57,7 +57,46 @@ class StoryDraftDecisionApiTest extends DraftApiTestSupport {
                 "coreFacts", List.of("cualquier hecho"),
                 "durationBudget", Map.of("minSeconds", 35, "maxSeconds", 40)));
         assertThat(viaPostStories.getStatusCode().value()).isEqualTo(201);
-        assertThat(viaPostStories.getBody()).isEqualTo(approvedStory);
+        // Única diferencia: el hookText, que solo viene del borrador (POST /stories no lo recibe).
+        assertThat(approvedStory.get("hookText")).isEqualTo(HOOK_TEXT);
+        Map<String, Object> withoutHookText = new java.util.LinkedHashMap<>(approvedStory);
+        withoutHookText.put("hookText", null);
+        assertThat(viaPostStories.getBody()).isEqualTo(withoutHookText);
+    }
+
+    @Test
+    void approve_withAHookTextEdit_storesItInTheDraftAndPassesItToTheStory() {
+        generate(validDraft(ID, "Estallido de Tunguska"), RESEARCHED);
+
+        ResponseEntity<Map> response = decide(Map.of("decision", "APPROVE", "hookText", "  BOSQUE CAÍDO SIN CRÁTER "));
+
+        assertThat(response.getStatusCode().value()).as(String.valueOf(response.getBody())).isEqualTo(200);
+        assertThat(((Map<String, Object>) response.getBody().get("draft")).get("hookText")).isEqualTo("BOSQUE CAÍDO SIN CRÁTER");
+        assertThat(((Map<String, Object>) response.getBody().get("story")).get("hookText")).isEqualTo("BOSQUE CAÍDO SIN CRÁTER");
+        assertThat(getMap("/stories/" + ID).getBody().get("hookText")).isEqualTo("BOSQUE CAÍDO SIN CRÁTER");
+    }
+
+    @Test
+    void approve_withoutHookText_createsTheStoryWithANullHookText() {
+        Map<String, Object> noHook = validDraft(ID, "Estallido de Tunguska");
+        noHook.remove("hookText"); // solo el aviso SOFT HOOK_TEXT_MISSING: no bloquea
+        generate(noHook, RESEARCHED);
+
+        assertThat(decide(Map.of("decision", "APPROVE")).getStatusCode().value()).isEqualTo(200);
+        Map<String, Object> story = getMap("/stories/" + ID).getBody();
+        assertThat(story).containsEntry("hookText", null);
+    }
+
+    @Test
+    void approve_withABlankOrNonTextHookText_is400_andTheDraftStaysPending() throws Exception {
+        generate(validDraft(ID, "Estallido de Tunguska"), RESEARCHED);
+        byte[] before = Files.readAllBytes(draftsDir().resolve(ID + ".json"));
+
+        assertThat(decide(Map.of("decision", "APPROVE", "hookText", "   ")).getStatusCode().value()).isEqualTo(400);
+        assertThat(decide(Map.of("decision", "APPROVE", "hookText", 5)).getStatusCode().value()).isEqualTo(400);
+
+        assertThat(Files.readAllBytes(draftsDir().resolve(ID + ".json"))).isEqualTo(before);
+        assertThat(Files.exists(storiesDir().resolve(ID + ".json"))).isFalse();
     }
 
     @Test

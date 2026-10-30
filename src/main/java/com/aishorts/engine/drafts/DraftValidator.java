@@ -42,7 +42,23 @@ public final class DraftValidator {
     private final Map<String, Pattern> forbiddenTerms;
     private final Map<String, Pattern> negativeTerms;
     private final Map<String, Pattern> slowRevealTerms;
+    private final Map<String, Pattern> hookAftermathTerms;
     private final Map<String, Pattern> absoluteTerms;
+
+    /** Texto en pantalla del GANCHO: de 2 a 5 palabras (SOFT). */
+    static final int MIN_HOOK_TEXT_WORDS = 2;
+    static final int MAX_HOOK_TEXT_WORDS = 5;
+
+    /**
+     * Título planteado como "¿y si…?" / "qué pasaría si" (SOFT): el título
+     * reformula el gancho (la anomalía o el dato), no la hipótesis. "y si"
+     * se busca como palabras completas (no avisa en "y Siberia"); "qué
+     * pasaría" exige la tilde de "qué" o el "¿" delante, para no avisar en
+     * "lo que pasaría" (relativo, no pregunta).
+     */
+    private static final Pattern TITLE_WHAT_IF = Pattern.compile(
+            "(?<![\\p{L}\\p{N}])(?:y\\s+si|(?:qué|(?<=¿)\\s*que)\\s+pasar[ií]a)(?![\\p{L}\\p{N}])",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     /**
      * Narración del GANCHO que abre con la fecha (SOFT): su primer token es
@@ -65,6 +81,7 @@ public final class DraftValidator {
         this.forbiddenTerms = compileTerms(properties.forbiddenVisualTerms());
         this.negativeTerms = compileTerms(properties.negativePromptTerms());
         this.slowRevealTerms = compileTerms(properties.slowRevealTerms());
+        this.hookAftermathTerms = compileTerms(properties.hookAftermathTerms());
         this.absoluteTerms = compileTerms(properties.absoluteTerms());
     }
 
@@ -75,6 +92,8 @@ public final class DraftValidator {
 
         validateSlug(draft, context, violations);
         validateTitleAbsolutes(draft, violations);
+        validateTitleWhatIf(draft, violations);
+        validateHookText(draft, violations);
         validateScenes(draft, claimsById, violations);
         validateWhatIf(draft, claimsById, violations);
         validateSources(draft, researched, violations);
@@ -110,6 +129,28 @@ public final class DraftValidator {
                         + "': solo con una fuente que lo diga literalmente; si no, usar la forma acotada."));
             }
         });
+    }
+
+    // --- SOFT: título como hipótesis y texto en pantalla del gancho --------------------------
+
+    private void validateTitleWhatIf(StoryDraft draft, List<Violation> violations) {
+        if (draft.title != null && TITLE_WHAT_IF.matcher(draft.title).find()) {
+            violations.add(Violation.soft("TITLE_WHAT_IF", "El title está planteado como \"¿y si…?\" / \"qué pasaría\": "
+                    + "debería reformular el gancho (la anomalía o el dato), no la hipótesis."));
+        }
+    }
+
+    private void validateHookText(StoryDraft draft, List<Violation> violations) {
+        if (isBlank(draft.hookText)) {
+            violations.add(Violation.soft("HOOK_TEXT_MISSING", "Falta 'hookText': el texto en pantalla del GANCHO ("
+                    + MIN_HOOK_TEXT_WORDS + "-" + MAX_HOOK_TEXT_WORDS + " palabras) que nombra la anomalía o la cifra central."));
+            return;
+        }
+        int words = DraftText.countWords(draft.hookText);
+        if (words < MIN_HOOK_TEXT_WORDS || words > MAX_HOOK_TEXT_WORDS) {
+            violations.add(Violation.soft("HOOK_TEXT_LENGTH", "El hookText tiene " + words + " palabras; debe tener entre "
+                    + MIN_HOOK_TEXT_WORDS + " y " + MAX_HOOK_TEXT_WORDS + "."));
+        }
     }
 
     // --- HARD y SOFT por escena ------------------------------------------------------------
@@ -238,6 +279,12 @@ public final class DraftValidator {
                 if (pattern.matcher(prompt).find()) {
                     violations.add(Violation.softScene("HOOK_SLOW_REVEAL", scene.id, where + ": el visualPrompt contiene '"
                             + term + "'; el elemento clave debería estar en cuadro desde el primer fotograma."));
+                }
+            });
+            hookAftermathTerms.forEach((term, pattern) -> {
+                if (pattern.matcher(prompt).find()) {
+                    violations.add(Violation.softScene("HOOK_AFTERMATH", scene.id, where + ": el visualPrompt contiene '"
+                            + term + "'; el GANCHO debería mostrar el evento en su pico, no el después."));
                 }
             });
         }

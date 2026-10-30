@@ -376,6 +376,92 @@ class FinalVideoApiTest {
         assertThat(waitForTerminal("fv-busy-b").get("status")).isEqualTo("COMPLETED");
     }
 
+    // --- POST /stories/{id}/clip-offsets ----------------------------------------------------
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void clipOffsets_validOffsetsAreSavedAndReturnedByGetStory() throws Exception {
+        readyStoryWithClipsOf("co-ok", 7.458); // escenas de 4.458 s: offset máximo 3.0
+
+        Map<String, Object> body = post("/stories/co-ok/clip-offsets", Map.of("co-ok-gancho", 3.0, "co-ok-explicacion", 0.5), 200);
+
+        assertThat(offsetsOf((Map<String, Object>) body.get("story")))
+                .containsEntry("co-ok-gancho", 3.0).containsEntry("co-ok-explicacion", 0.5).containsEntry("co-ok-cierre", 0.0);
+        assertThat(offsetsOf(get("/stories/co-ok", 200))).containsEntry("co-ok-gancho", 3.0).containsEntry("co-ok-explicacion", 0.5);
+        assertThat(repository.findById("co-ok").orElseThrow().scenes().get(0).clipStartOffset()).isEqualTo(3.0);
+    }
+
+    @Test
+    void clipOffsets_anOffsetThatOverrunsTheClipIs422_andNoSceneChanges() throws Exception {
+        readyStoryWithClipsOf("co-long", 7.458);
+
+        Map<String, Object> error = post("/stories/co-long/clip-offsets",
+                Map.of("co-long-explicacion", 1.0, "co-long-gancho", 3.01), 422);
+
+        assertThat(error.get("error").toString()).contains("co-long-gancho").contains("7.458").contains("3.000");
+        assertThat(offsetsOf(get("/stories/co-long", 200)).values()).containsOnly(0.0);
+    }
+
+    @Test
+    void clipOffsets_invalidRequestsAre400Or404_andNothingChanges() throws Exception {
+        readyStoryWithClipsOf("co-bad", 7.458);
+
+        post("/stories/co-bad/clip-offsets", Map.of(), 400);
+        post("/stories/co-bad/clip-offsets", Map.of("co-bad-gancho", -0.5), 400);
+        post("/stories/co-bad/clip-offsets", Map.of("co-bad-gancho", "3"), 400);
+        post("/stories/co-bad/clip-offsets", Map.of("co-bad-gancho", true), 400);
+        post("/stories/co-bad/clip-offsets", Map.of("co-bad-gancho", 1.0, "otra-escena", 1.0), 400);
+        post("/stories/no-existe/clip-offsets", Map.of("x", 1.0), 404);
+
+        assertThat(offsetsOf(get("/stories/co-bad", 200)).values()).containsOnly(0.0);
+    }
+
+    @Test
+    void clipOffsets_aClipWithoutDurationIs422_andASceneWithoutLocalClipIs409() throws Exception {
+        readyStory("co-nodur"); // Mp4Fixtures.valid(): sin caja mdhd
+        assertThat(post("/stories/co-nodur/clip-offsets", Map.of("co-nodur-gancho", 0.1), 422).get("error").toString())
+                .contains("mdhd");
+
+        List<Map<String, Object>> scenes = FinalVideoFixtures.readyScenes("co-noclip", clips(), audio());
+        scenes.get(0).put("localClipPath", null);
+        repository.save(FinalVideoFixtures.story("co-noclip", scenes));
+        assertThat(post("/stories/co-noclip/clip-offsets", Map.of("co-noclip-gancho", 0.1), 409).get("error").toString())
+                .contains("clip local");
+    }
+
+    @Test
+    void clipOffsets_whileItsFinalVideoRenders_is409_andWorksAgainAfterwards() throws Exception {
+        readyStoryWithClipsOf("co-busy", 7.458);
+        runner.mode = FakeProcessRunner.Mode.BLOCK;
+        post("/stories/co-busy/final-video", null, 202);
+        assertThat(runner.started.await(10, TimeUnit.SECONDS)).isTrue();
+
+        assertThat(post("/stories/co-busy/clip-offsets", Map.of("co-busy-gancho", 1.0), 409).get("error").toString())
+                .contains("en curso");
+
+        runner.release.countDown();
+        assertThat(waitForTerminal("co-busy").get("status")).isEqualTo("COMPLETED");
+        post("/stories/co-busy/clip-offsets", Map.of("co-busy-gancho", 1.0), 200);
+    }
+
+    /** readyStory, pero con clips que declaran su duración (mdhd), en segundos. */
+    private void readyStoryWithClipsOf(String storyId, double clipSeconds) throws Exception {
+        readyStory(storyId);
+        for (String role : FinalVideoFixtures.ROLES) {
+            Files.write(clips().resolve(storyId + "-" + role.toLowerCase() + ".mp4"),
+                    Mp4Fixtures.of(720, 1280).mediaDuration(0, 1000, Math.round(clipSeconds * 1000)).build());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Double> offsetsOf(Map<String, Object> story) {
+        Map<String, Double> offsets = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> scene : (List<Map<String, Object>>) story.get("scenes")) {
+            offsets.put((String) scene.get("id"), ((Number) scene.get("clipStartOffset")).doubleValue());
+        }
+        return offsets;
+    }
+
     @Test
     void twoSimultaneousPostsStartOnlyOneRender() throws Exception {
         readyStory("fv-race");

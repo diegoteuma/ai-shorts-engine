@@ -81,6 +81,37 @@ class StoryDraftEditApiTest extends DraftApiTestSupport {
     }
 
     @Test
+    void edit_hookText_isStoredRevalidatedAndReachesTheStory() {
+        generate();
+
+        ResponseEntity<Map> tooShort = patch(Map.of("hookText", "EXPLOSIÓN"));
+        assertThat(tooShort.getStatusCode().value()).isEqualTo(200);
+        assertThat(tooShort.getBody().get("hookText")).isEqualTo("EXPLOSIÓN");
+        assertThat((List<Map<String, Object>>) tooShort.getBody().get("violations"))
+                .extracting(v -> v.get("code") + "/" + v.get("severity"))
+                .containsExactly("HOOK_TEXT_LENGTH/SOFT");
+
+        ResponseEntity<Map> fixed = patch(Map.of("hookText", " CAYÓ UN BOSQUE ENTERO "));
+        assertThat((List<?>) fixed.getBody().get("violations")).isEmpty();
+        assertThat(getMap("/story-drafts/" + ID).getBody().get("hookText")).isEqualTo("CAYÓ UN BOSQUE ENTERO");
+
+        assertThat(post("/story-drafts/" + ID + "/decision", Map.of("decision", "APPROVE", "acknowledgeUnverified", true))
+                .getStatusCode().value()).isEqualTo(200);
+        assertThat(getMap("/stories/" + ID).getBody().get("hookText")).isEqualTo("CAYÓ UN BOSQUE ENTERO");
+    }
+
+    @Test
+    void edit_withABlankOrNonTextHookText_is400_andLeavesTheDraftUntouched() throws Exception {
+        generate();
+        byte[] before = Files.readAllBytes(draftsDir().resolve(ID + ".json"));
+
+        assertThat(patch(Map.of("hookText", "  ")).getStatusCode().value()).isEqualTo(400);
+        assertThat(patch(Map.of("hookText", List.of("X"))).getStatusCode().value()).isEqualTo(400);
+
+        assertThat(Files.readAllBytes(draftsDir().resolve(ID + ".json"))).isEqualTo(before);
+    }
+
+    @Test
     void edit_ofADecidedDraft_is409() throws Exception {
         generate();
         assertThat(post("/story-drafts/" + ID + "/decision", Map.of("decision", "REJECT", "note", "no"))

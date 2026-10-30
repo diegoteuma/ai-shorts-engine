@@ -101,13 +101,19 @@ public class EngineConfiguration {
     }
 
     @Bean
-    StoryApprovalService storyApprovalService(HiggsfieldClient higgsfieldClient, HiggsfieldConfig higgsfieldConfig, TtsService ttsService) {
+    StoryApprovalService storyApprovalService(
+            HiggsfieldClient higgsfieldClient,
+            HiggsfieldConfig higgsfieldConfig,
+            TtsService ttsService,
+            @Value("${engine.hook.lead-seconds}") double hookLeadSeconds
+    ) {
         return new StoryApprovalService(
                 higgsfieldClient,
                 higgsfieldConfig,
                 new DefaultSceneDifficultyScorer(),
                 WordsPerSecondDurationEstimator.neutralSpanish(),
-                ttsService
+                ttsService,
+                hookLeadSeconds
         );
     }
 
