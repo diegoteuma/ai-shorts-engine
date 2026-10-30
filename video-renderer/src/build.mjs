@@ -1,5 +1,5 @@
 // Núcleo puro (sin E/S): Story + transcripciones + plantilla -> index.html de la composición.
-import { buildTimeline } from "./story.mjs";
+import { buildTimeline, readHookText } from "./story.mjs";
 import { convertNumerals } from "./numerals.mjs";
 import { alignScene, tokenize } from "./align.mjs";
 import { applyMinWordDuration, groupWords, renderCaptions } from "./captions.mjs";
@@ -26,7 +26,7 @@ export function renderMedia(scenes, { width, height, audioEndMarginSec = DEFAULT
         src="assets/clips/${s.id}.mp4"
         data-start="${s.start.toFixed(6)}"
         data-duration="${s.duration.toFixed(6)}"
-        data-media-start="0"
+        data-media-start="${String(round6(s.clipStartOffset ?? 0))}"
         data-track-index="0"
         muted
         playsinline
@@ -44,6 +44,57 @@ export function renderMedia(scenes, { width, height, audioEndMarginSec = DEFAULT
 `;
   });
   return videos + audios;
+}
+
+/**
+ * Texto en pantalla del gancho, en el tercio superior, desde el fotograma 0 hasta `end` (fin de la escena GANCHO).
+ * El texto va escapado en el HTML (visible aunque el script todavía no haya corrido) y nunca dentro del <script>:
+ * el JS solo lee el DOM para ajustar el tamaño. Sin fundido de entrada; animación determinista (un leve acercamiento
+ * lineal y un fundido de salida de 0.15 s). Sin hookText devuelve cadenas vacías: la composición queda idéntica.
+ */
+export function renderHookText(hookText, { end }) {
+  if (hookText === null) return { css: "", html: "", js: "" };
+  const fadeOut = Math.max(0, end - 0.15);
+  const css = `
+      #hook-text {
+        position: absolute;
+        top: 11%;
+        left: 6%;
+        width: 88%;
+        z-index: 11;
+        display: flex;
+        justify-content: center;
+        pointer-events: none;
+      }
+      #hook-text-box {
+        font-family: "Montserrat", sans-serif;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: #ffffff;
+        background: rgba(0, 0, 0, 0.78);
+        border-bottom: 8px solid #ff1745;
+        border-radius: 10px;
+        padding: 14px 22px 12px;
+        line-height: 1.05;
+        letter-spacing: 0.01em;
+        text-align: center;
+        text-shadow: 0 3px 10px rgba(0, 0, 0, 0.6);
+        transform-origin: 50% 50%;
+      }
+`;
+  const html = `      <div id="hook-text"><div id="hook-text-box">${escapeHtml(hookText)}</div></div>\n`;
+  const js =
+    `\n  // Texto del gancho: visible desde el fotograma 0 hasta ${end.toFixed(3)} s (fin del GANCHO), sin fundido de entrada.\n` +
+    `  (function(){\n` +
+    `    var box = document.getElementById("hook-text-box");\n` +
+    `    var longest = box.textContent.toUpperCase().split(/\\s+/).reduce(function(a, b){ return b.length > a.length ? b : a; }, "");\n` +
+    `    var base = Math.round(CANVAS_W * 0.12);\n` +
+    `    box.style.fontSize = fitFontSize(longest, base, "800", "Montserrat", Math.round(CANVAS_W * 0.76)) + "px";\n` +
+    `    tl.fromTo(box, { scale: 1 }, { scale: 1.05, duration: ${end.toFixed(6)}, ease: "none" }, 0);\n` +
+    `    tl.to("#hook-text", { opacity: 0, duration: ${(end - fadeOut).toFixed(6)}, ease: "power2.in" }, ${fadeOut.toFixed(6)});\n` +
+    `    tl.set("#hook-text", { opacity: 0, visibility: "hidden" }, ${end.toFixed(6)});\n` +
+    `  })();\n`;
+  return { css, html, js };
 }
 
 /** Sustituye {{CLAVE}} en una sola pasada (los valores no se vuelven a escanear). Falla si falta una clave. */
@@ -165,6 +216,14 @@ export function buildComposition({ story, transcriptsByScene, template, options 
   const groupWindows = groupWords(timedWords, sceneBounds);
   const { html: captionDivs, js: captionJs } = renderCaptions(groupWindows);
 
+  const hookText = readHookText(story);
+  let hookScene = scenes.find((s) => s.role === "GANCHO");
+  if (hookText !== null && !hookScene) {
+    hookScene = scenes[0];
+    warnings.push(`La historia tiene hookText pero ninguna escena GANCHO: se muestra durante la primera escena (${hookScene.id}).`);
+  }
+  const hook = renderHookText(hookText, { end: hookScene ? round6(hookScene.start + hookScene.duration) : 0 });
+
   const html = fillTemplate(template, {
     TITLE: escapeHtml(o.title),
     WIDTH: o.width,
@@ -174,12 +233,16 @@ export function buildComposition({ story, transcriptsByScene, template, options 
     MEDIA: renderMedia(scenes, o),
     CAPTION_DIVS: captionDivs,
     CAPTION_JS: captionJs,
+    HOOK_CSS: hook.css,
+    HOOK_HTML: hook.html,
+    HOOK_JS: hook.js,
   });
 
   return {
     html,
     scenes,
     totalDuration,
+    hookText,
     words: timedWords,
     groups: groupWindows.map((g) => ({
       text: g.words.map((w) => w.text).join(" "),

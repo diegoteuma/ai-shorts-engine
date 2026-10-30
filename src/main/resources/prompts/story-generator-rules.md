@@ -44,6 +44,10 @@ Reglas duras: **total entre 92 y 104 palabras**; ninguna escena de más de 8 s (
 
 **GANCHO.** Empieza por lo más concreto y sorprendente del hecho real, con su cifra o su dato central, en una frase corta. El elemento sorprendente o anómalo (lo que contradice lo esperado, o la cifra central) va en las **primeras 4 palabras**: los subtítulos se muestran en grupos de hasta 4 palabras. No empieces con la fecha, el año ni el lugar; la fecha va después. Malo: "En 1859, una aurora boreal se vio en el Caribe" (el primer grupo es "En 1859, una aurora"). Bueno: "Auroras boreales en el Caribe. Pasó en 1859." Prohibido abrir con "¿Sabías que…?", con adjetivos vacíos ("increíble", "impactante") o con una promesa que el video no cumple. No uses una cifra más llamativa que la documentada.
 
+**Coherencia texto-imagen en el GANCHO.** Lo que dicen las primeras 4 palabras se ve en pantalla en ese mismo momento: si la narración dice "una explosión", el clip ya muestra la explosión en el instante 0, no el bosque de después.
+
+**Texto en pantalla del gancho (`hookText`).** De **2 a 5 palabras**, en español, que nombran la anomalía o la cifra central (por ejemplo "AURORAS EN EL TRÓPICO", "EXPLOSIÓN SIN CRÁTER"). Se muestra grande desde el primer fotograma. Debe estar respaldado por una claim de la escena GANCHO, igual que la narración: nada que la narración y sus fuentes no sostengan. Sin signos de pregunta ni "¿y si…?".
+
 **GIRO.** Debe contener una marca inequívoca de hipótesis ("Ahora imaginemos…", "¿Y si…?") y plantear **una sola** variable cambiada. A partir de aquí todo el lenguaje va en condicional ("habría", "podría").
 
 **CONSECUENCIA.** Efectos derivados de los parámetros del evento real, no inventados. Prefiere efectos físicos (edificios, vidrios, radio de daño) a cifras de víctimas. Solo cita cifras de víctimas si salen de un estudio publicado, con rango y fuente; si no, cualitativo.
@@ -90,6 +94,7 @@ Reglas:
 - La puntuación marca las pausas: coma para un respiro, punto para cortar.
 - Tono sobrio de documental: sin sensacionalismo, sin humor, sin juicios morales.
 - **Verifica el presupuesto antes de responder**: cuenta las palabras de cada escena y el total (92-104) y calcula los segundos con 2.65 palabras/s. Si te sales, reescribe.
+- El `title` reformula el gancho: nombra la anomalía o el dato del hecho real, **sin "¿y si…?" ni "qué pasaría si"** (la hipótesis no va en el título). Malo: "¿Y si Tunguska cayera sobre una ciudad?". Bueno: "Un bosque entero cayó sin dejar cráter".
 - El `title` debe ser honesto: coherente con lo que dice el video, máximo ~60 caracteres y sin clickbait que el contenido no cumpla. Puede llevar una cifra solo si es la mejor estimación documentada, tiene 2 fuentes tier A/B y se enmarca como tal ("unos", "cerca de").
 
 ## 8. Prompts visuales (`visualPrompt`)
@@ -107,7 +112,7 @@ Un prompt por escena para un modelo de **texto a video** (Wan 3.0 Prime u otro),
 9. **Evita palabras que activan clichés**. En una explosión aérea, por ejemplo, *impact, crash, crater, mushroom cloud, ground blast*: los modelos tienden a dibujar la explosión contra el suelo con hongo. Describe lo que sí pasa ("detonates high in the sky", "pressure wave sweeping outward across the canopy").
 10. Debe **coincidir con la narración** del momento: no ilustres otra cosa.
 11. Criterio por rol:
-    - GANCHO: la imagen más potente del resultado, cinematográfica. El **primer fotograma ya muestra el elemento clave** en su momento de mayor impacto. Prohibido abrir con un plano tranquilo y llegar al elemento por panorámica, inclinación o revelación (*tilt up to reveal, pan to reveal, slowly reveals, starting on a calm…*). El movimiento de cámara puede continuar, pero el sujeto está en cuadro desde el inicio; escríbelo como *"From the very first frame, …"*.
+    - GANCHO: **el evento en su pico, no el después.** Muestra el momento de máxima acción del hecho real (la explosión, la erupción, la aurora en pleno cielo), con movimiento rápido y visible. Prohibido usar para el GANCHO el resultado o las consecuencias (bosque derribado, ciudad en ruinas, cenizas, paisaje devastado; palabras como *aftermath, devastated, flattened, ruins, remains of, already fallen*): eso va en otra escena. Escribe qué se ve en el instante 0: *"At 0 seconds the frame already shows …"*. Prohibido abrir con un plano tranquilo y llegar al elemento por panorámica, inclinación o revelación (*tilt up to reveal, pan to reveal, slowly reveals, starting on a calm…*). El movimiento de cámara puede continuar, pero el sujeto está en cuadro, en plena acción, desde el inicio.
     - EXPLICACION: el mecanismo físico en imagen real y verosímil (no diagrama).
     - CONTEXTO: lugar y época, sereno; un look de archivo histórico es válido si dice *photorealistic*.
     - GIRO: un plano establecido del escenario hipotético; evita morphing y pantalla dividida (los modelos suelen resolverlos mal).
@@ -137,6 +142,7 @@ Devuelve **solo JSON válido**, sin markdown:
   "id": "slug-corto-en-minusculas",
   "topic": "…",
   "title": "…",
+  "hookText": "2 A 5 PALABRAS",
   "scenes": [
     {
       "id": "<slug>-gancho",
@@ -194,6 +200,7 @@ Modo PROPUESTAS: devuelve solo JSON válido con la forma `{ "candidates": [ { "t
 4. ¿Cifras clave con 2 fuentes tier A/B, o marcadas como BAJA o SIN_VERIFICAR?
 5. ¿Alguna cifra redondeada hacia arriba, superlativo sin fuente o URL que no consultaste?
 6. ¿Hipótesis marcada en el GIRO y en condicional en la CONSECUENCIA?
-7. ¿Cada `visualPrompt` en inglés, en positivo, de una sola toma, con ≤3 eventos, con el ancla de estilo, sin palabras-cliché y con su física respetada? ¿El del GANCHO muestra el elemento clave desde el primer fotograma, sin plano tranquilo inicial ni revelación?
-8. ¿Tema distinto de `existingStories`?
-9. ¿JSON válido, sin texto extra?
+7. ¿Cada `visualPrompt` en inglés, en positivo, de una sola toma, con ≤3 eventos, con el ancla de estilo, sin palabras-cliché y con su física respetada? ¿El del GANCHO muestra el evento en su pico (no el después) desde el instante 0 ("At 0 seconds the frame already shows …"), con movimiento rápido, sin plano tranquilo inicial ni revelación, y coincide con lo que dicen las primeras 4 palabras?
+8. ¿`hookText` de 2 a 5 palabras, respaldado por una claim del GANCHO y sin preguntas? ¿`title` sin "¿y si…?" ni "qué pasaría si"?
+9. ¿Tema distinto de `existingStories`?
+10. ¿JSON válido, sin texto extra?

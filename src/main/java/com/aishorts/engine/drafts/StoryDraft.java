@@ -24,6 +24,12 @@ public final class StoryDraft {
     public String id;
     public String topic;
     public String title;
+    /**
+     * Texto en pantalla del GANCHO (2-5 palabras, p. ej. "AURORAS EN EL
+     * TRÓPICO"), visible desde el fotograma 0. Opcional: si falta solo hay
+     * un aviso SOFT. Pasa a la Story al aprobar.
+     */
+    public String hookText;
     public DraftStatus status;
     public int attempts;
     public String requestedTopic;

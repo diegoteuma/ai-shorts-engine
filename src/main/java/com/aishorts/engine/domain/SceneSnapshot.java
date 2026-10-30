@@ -38,6 +38,7 @@ public record SceneSnapshot(
         String generatedAssetUrl,
         String generationFailureReason,
         String localClipPath,
-        String localClipFailureReason
+        String localClipFailureReason,
+        double clipStartOffset
 ) {
 }

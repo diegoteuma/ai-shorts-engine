@@ -54,6 +54,13 @@ public final class Scene {
     private String localClipPath;
     /** Motivo de la última descarga fallida del clip; null si no hubo fallo o ya se resolvió. */
     private String localClipFailureReason;
+    /**
+     * Desde qué segundo del clip se empieza a mostrar (0 = desde el inicio).
+     * En el GANCHO vale por defecto el margen de arranque pedido de más a
+     * Higgsfield (engine.hook.lead-seconds), para saltear la construcción
+     * lenta del modelo; se ajusta con POST /stories/{id}/clip-offsets.
+     */
+    private double clipStartOffset;
 
     public Scene(String id, SceneRole role, int order, String narrationText, String visualPrompt, Duration targetDuration) {
         this.id = Objects.requireNonNull(id, "id");
@@ -257,6 +264,19 @@ public final class Scene {
         return localClipPath != null;
     }
 
+    /**
+     * Fija desde qué segundo del clip se muestra. Solo valida el número
+     * (finito y >= 0): que el clip alcance (offset + duración <= duración
+     * real del clip) lo comprueba quien conoce el archivo.
+     */
+    public void setClipStartOffset(double seconds) {
+        if (!Double.isFinite(seconds) || seconds < 0) {
+            throw new IllegalArgumentException("El clipStartOffset de la escena '" + id
+                    + "' debe ser un número de segundos >= 0, llegó: " + seconds + ".");
+        }
+        this.clipStartOffset = seconds;
+    }
+
     public boolean isReadyToGenerate() {
         return isCostApproved() && generationStatus == GenerationStatus.NOT_STARTED;
     }
@@ -291,6 +311,8 @@ public final class Scene {
         // El archivo en disco lo borra quien llama (ClipStore): Scene no hace E/S.
         this.localClipPath = null;
         this.localClipFailureReason = null;
+        // El corte era del clip descartado; generateApprovedScenes fija el del clip nuevo.
+        this.clipStartOffset = 0;
     }
 
     /** Vuelve el costo a NOT_ESTIMATED: hay que estimarlo y aprobarlo de nuevo en la PUERTA 2. */
@@ -346,7 +368,8 @@ public final class Scene {
                 narrationAudioPath,
                 generationStatus, higgsfieldRequestId, higgsfieldStatusUrl,
                 generatedAssetUrl, generationFailureReason,
-                localClipPath, localClipFailureReason);
+                localClipPath, localClipFailureReason,
+                clipStartOffset);
     }
 
     /**
@@ -376,6 +399,7 @@ public final class Scene {
         scene.generationFailureReason = snapshot.generationFailureReason();
         scene.localClipPath = snapshot.localClipPath();
         scene.localClipFailureReason = snapshot.localClipFailureReason();
+        scene.clipStartOffset = snapshot.clipStartOffset();
         return scene;
     }
 
@@ -403,6 +427,7 @@ public final class Scene {
     public String generationFailureReason() { return generationFailureReason; }
     public String localClipPath() { return localClipPath; }
     public String localClipFailureReason() { return localClipFailureReason; }
+    public double clipStartOffset() { return clipStartOffset; }
 
     @Override
     public String toString() {

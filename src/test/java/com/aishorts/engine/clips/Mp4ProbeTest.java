@@ -32,6 +32,41 @@ class Mp4ProbeTest {
     }
 
     @Test
+    void readsTheVideoTrackDurationFromMdhd_version0And1() throws IOException {
+        Mp4Probe.Info v0 = Mp4Probe.probe(write("v0.mp4", Mp4Fixtures.of(720, 1280).mediaDuration(0, 15360, 76800).build()));
+        Mp4Probe.Info v1 = Mp4Probe.probe(write("v1.mp4", Mp4Fixtures.of(720, 1280).mediaDuration(1, 24, 193).moovLast().build()));
+
+        assertThat(v0.durationSeconds()).isEqualTo(5.0);
+        assertThat(v1.durationSeconds()).isCloseTo(8.041667, org.assertj.core.data.Offset.offset(1e-6));
+    }
+
+    @Test
+    void withoutMdhdTheDurationIsNull_andTheRestStillWorks() throws IOException {
+        Mp4Probe.Info info = Mp4Probe.probe(write("sin-mdhd.mp4", Mp4Fixtures.valid()));
+
+        assertThat(info.durationSeconds()).isNull();
+        assertThat(info.width()).isEqualTo(720);
+    }
+
+    @Test
+    void rejectsAnMdhdWithZeroTimescale() throws IOException {
+        Path file = write("ts0.mp4", Mp4Fixtures.of(720, 1280).mediaDuration(0, 0, 100).build());
+
+        assertThatThrownBy(() -> Mp4Probe.probe(file)).isInstanceOf(ClipException.class).hasMessageContaining("mdhd");
+    }
+
+    /** Duraciones de la pista de video medidas con ffprobe (stream=duration) sobre los clips versionados de tunguska. */
+    @Test
+    void theRealTunguskaClipsMatchFfprobe() {
+        java.util.Map<String, Double> ffprobe = java.util.Map.of(
+                "gancho", 5.0, "explicacion", 7.0, "contexto", 8.0,
+                "giro", 7.041667, "consecuencia", 8.041667, "cierre", 5.0);
+        ffprobe.forEach((role, expected) -> assertThat(
+                Mp4Probe.probe(Path.of("data", "clips", "tunguska-" + role + ".mp4")).durationSeconds())
+                .as(role).isCloseTo(expected, org.assertj.core.data.Offset.offset(1e-6)));
+    }
+
+    @Test
     void acceptsMoovAfterMdat() throws IOException {
         // Sin faststart el moov va al final; es lo que producen muchos encoders.
         Mp4Probe.Info info = Mp4Probe.probe(write("moov-last.mp4", Mp4Fixtures.of(720, 1280).moovLast().build()));

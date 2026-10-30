@@ -79,6 +79,7 @@ public final class DraftNormalizer {
         draft.id = trimmedText(root, "id", violations);
         draft.topic = trimmedText(root, "topic", violations);
         draft.title = trimmedText(root, "title", violations);
+        draft.hookText = trimmedText(root, "hookText", violations);
 
         JsonNode scenesNode = root.get("scenes");
         if (scenesNode == null || !scenesNode.isArray()) {

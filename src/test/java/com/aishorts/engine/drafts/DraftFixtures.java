@@ -30,7 +30,8 @@ final class DraftFixtures {
     static final String SMITHSONIAN = "https://www.smithsonianmag.com/science-nature/tunguska-120/";
     static final List<String> RESEARCHED = List.of(NASA, BRITANNICA, USGS, SMITHSONIAN);
 
-    static final String ANCHOR = "Hyperrealistic cinematic documentary footage, vertical 9:16 composition";
+    static final String HOOK_TEXT = "EXPLOSIÓN SIN CRÁTER";
+    static final String ANCHOR ="Hyperrealistic cinematic documentary footage, vertical 9:16 composition";
     static final String[] ROLES = {"GANCHO", "EXPLICACION", "CONTEXTO", "GIRO", "CONSECUENCIA", "CIERRE"};
     /** Dentro del rango de cada rol; total 94 (92-104), cada escena entre 3 y 8 s a 2.65 palabras/s. */
     static final int[] WORDS = {12, 19, 18, 15, 18, 12};
@@ -57,6 +58,7 @@ final class DraftFixtures {
         draft.put("id", slug);
         draft.put("topic", topic);
         draft.put("title", "El estallido que tumbó un bosque entero");
+        draft.put("hookText", HOOK_TEXT);
         List<Object> scenes = new ArrayList<>();
         List<List<String>> claimIds = List.of(List.of("c1"), List.of("c1", "c2"), List.of("c2"), List.of("c3"), List.of("c3"), List.of());
         for (int i = 0; i < ROLES.length; i++) {

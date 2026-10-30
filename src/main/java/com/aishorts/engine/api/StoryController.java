@@ -6,7 +6,9 @@ import com.aishorts.engine.approval.PromptDecision;
 import com.aishorts.engine.approval.StoryApprovalService;
 import com.aishorts.engine.clips.ClipStore;
 import com.aishorts.engine.clips.ClipSyncResult;
+import com.aishorts.engine.clips.Mp4Probe;
 import com.aishorts.engine.difficulty.DifficultyFactors;
+import com.aishorts.engine.domain.Scene;
 import com.aishorts.engine.domain.Story;
 import com.aishorts.engine.domain.StoryIds;
 import com.aishorts.engine.duration.ActualDurationChecker;
@@ -15,6 +17,8 @@ import com.aishorts.engine.persistence.SnapshotMapper;
 import com.aishorts.engine.persistence.StoryRepository;
 import com.aishorts.engine.script.StoryBrief;
 import com.aishorts.engine.script.StoryDraftingService;
+import com.aishorts.engine.video.FinalVideoService;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -64,6 +68,9 @@ import java.util.UUID;
  * POST   /stories/{id}/reset-generation   resetAllScenesForRegeneration / resetScenesForRegeneration
  *                                          (body omitido -> todas; lista de sceneIds -> parcial; [] -> 400)
  *                                          Borra también la copia local del clip de las escenas reseteadas.
+ * POST   /stories/{id}/clip-offsets       { "&lt;sceneId&gt;": segundos }: desde qué segundo del clip local se muestra
+ *                                          cada escena (todo o nada). 0 &lt;= offset y offset + targetDuration
+ *                                          &lt;= duración del clip (Mp4Probe); 409 si su video final está en curso.
  * </pre>
  */
 @RestController
@@ -77,6 +84,8 @@ public class StoryController {
     private final StoryIndex storyIndex;
     private final ClipStore clipStore;
     private final ActualDurationChecker durationChecker;
+    /** Solo existe con engine.final-video.enabled=true; sin él no puede haber un render en curso. */
+    private final ObjectProvider<FinalVideoService> finalVideoService;
 
     public StoryController(
             StoryApprovalService approvalService,
@@ -85,8 +94,10 @@ public class StoryController {
             @Qualifier("narrationAudioDir") Path narrationAudioDir,
             StoryIndex storyIndex,
             ClipStore clipStore,
-            ActualDurationChecker durationChecker
+            ActualDurationChecker durationChecker,
+            ObjectProvider<FinalVideoService> finalVideoService
     ) {
+        this.finalVideoService = finalVideoService;
         this.approvalService = approvalService;
         this.draftingService = draftingService;
         this.repository = repository;
@@ -206,6 +217,65 @@ public class StoryController {
         // Después de guardar: si el borrado falla queda un archivo huérfano (se pisa al regenerar), nunca un estado incoherente.
         clipStore.deleteClips(result.succeededSceneIds());
         return batchResponse(result, story);
+    }
+
+    /**
+     * Ajusta el corte de los clips después de verlos. Todo o nada: si una
+     * escena no pasa, no se cambia ninguna. 400 cuerpo inválido, escena
+     * desconocida u offset negativo; 409 render en curso o escena sin clip
+     * local; 422 el clip no alcanza o Mp4Probe no da su duración.
+     */
+    @PostMapping("/{id}/clip-offsets")
+    public Map<String, Object> clipOffsets(@PathVariable("id") String id, @RequestBody(required = false) Map<String, Object> body) {
+        Story story = loadOrNotFound(id);
+        if (body == null || body.isEmpty()) {
+            throw new ApiError(400, "Manda un objeto { \"<sceneId>\": segundos } con al menos una escena.");
+        }
+        FinalVideoService videos = finalVideoService.getIfAvailable();
+        if (videos != null && videos.isRendering(story.id())) {
+            throw new ApiError(409, "El video final de '" + story.id() + "' está en curso; ajustá los cortes cuando termine.");
+        }
+        Map<Scene, Double> offsets = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : body.entrySet()) {
+            Scene scene = story.scenes().stream().filter(s -> s.id().equals(entry.getKey())).findFirst()
+                    .orElseThrow(() -> new ApiError(400, "La historia '" + story.id() + "' no tiene la escena '" + entry.getKey() + "'."));
+            if (!(entry.getValue() instanceof Number number) || !Double.isFinite(number.doubleValue()) || number.doubleValue() < 0) {
+                throw new ApiError(400, "El offset de '" + scene.id() + "' debe ser un número de segundos >= 0, llegó: " + entry.getValue());
+            }
+            offsets.put(scene, number.doubleValue());
+        }
+        for (Map.Entry<Scene, Double> entry : offsets.entrySet()) {
+            requireClipLongEnough(entry.getKey(), entry.getValue());
+        }
+        offsets.forEach(Scene::setClipStartOffset);
+        repository.save(story);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("story", SnapshotMapper.toMap(story.toSnapshot()));
+        return response;
+    }
+
+    /** Margen de redondeo al comparar segundos (offset + duración vs. duración del clip). */
+    private static final double CLIP_FIT_EPSILON_SECONDS = 1e-6;
+
+    private void requireClipLongEnough(Scene scene, double offset) {
+        if (!scene.hasLocalClip()) {
+            throw new ApiError(409, "La escena '" + scene.id() + "' todavía no tiene clip local (poll-generation lo guarda).");
+        }
+        Double clipSeconds;
+        try {
+            clipSeconds = Mp4Probe.probe(clipStore.resolve(scene.localClipPath())).durationSeconds();
+        } catch (RuntimeException e) {
+            throw new ApiError(422, "No se pudo leer el clip de '" + scene.id() + "': " + e.getMessage());
+        }
+        if (clipSeconds == null) {
+            throw new ApiError(422, "El clip de '" + scene.id() + "' no declara su duración (sin caja 'mdhd').");
+        }
+        double sceneSeconds = scene.targetDuration().toMillis() / 1000.0;
+        if (offset + sceneSeconds > clipSeconds + CLIP_FIT_EPSILON_SECONDS) {
+            throw new ApiError(422, String.format(java.util.Locale.ROOT,
+                    "El clip de '%s' dura %.3f s: con offset %.3f s y una escena de %.3f s no alcanza (máximo offset %.3f s).",
+                    scene.id(), clipSeconds, offset, sceneSeconds, Math.max(0, clipSeconds - sceneSeconds)));
+        }
     }
 
     // --- helpers ----------------------------------------------------------------------------

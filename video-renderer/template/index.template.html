@@ -57,7 +57,7 @@
         transform-origin: 0% 50%;
       }
       .hl-word-text { position: relative; }
-    </style>
+{{HOOK_CSS}}    </style>
   </head>
   <body>
     <div
@@ -67,7 +67,7 @@
       data-height="{{HEIGHT}}"
       data-duration="{{TOTAL_DURATION}}"
     >
-{{MEDIA}}      <div id="cap-container">
+{{MEDIA}}{{HOOK_HTML}}      <div id="cap-container">
 {{CAPTION_DIVS}}      </div>
     </div>
     <script>
@@ -89,7 +89,7 @@
       }
 
       const tl = gsap.timeline({ paused: true });
-{{CAPTION_JS}}
+{{CAPTION_JS}}{{HOOK_JS}}
       window.__timelines["main"] = tl;
       tl.seek(0);
     </script>

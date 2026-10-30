@@ -46,7 +46,15 @@ public final class StoryApprovalService {
     private final SceneDifficultyScorer difficultyScorer;
     private final NarrationDurationEstimator durationEstimator;
     private final TtsService ttsService;
+    /**
+     * Segundos de más que se piden a Higgsfield SOLO para el GANCHO
+     * (engine.hook.lead-seconds): el modelo de texto a video arranca
+     * tranquilo y llega al pico a los ~2 s, así que se genera un clip más
+     * largo y se muestra desde este segundo (Scene.clipStartOffset).
+     */
+    private final double hookLeadSeconds;
 
+    /** Sin margen de arranque para el GANCHO (hookLeadSeconds = 0), el comportamiento anterior. */
     public StoryApprovalService(
             HiggsfieldClient higgsfieldClient,
             HiggsfieldConfig higgsfieldConfig,
@@ -54,11 +62,26 @@ public final class StoryApprovalService {
             NarrationDurationEstimator durationEstimator,
             TtsService ttsService
     ) {
+        this(higgsfieldClient, higgsfieldConfig, difficultyScorer, durationEstimator, ttsService, 0);
+    }
+
+    public StoryApprovalService(
+            HiggsfieldClient higgsfieldClient,
+            HiggsfieldConfig higgsfieldConfig,
+            SceneDifficultyScorer difficultyScorer,
+            NarrationDurationEstimator durationEstimator,
+            TtsService ttsService,
+            double hookLeadSeconds
+    ) {
+        if (!Double.isFinite(hookLeadSeconds) || hookLeadSeconds < 0) {
+            throw new IllegalArgumentException("engine.hook.lead-seconds debe ser >= 0, llegó: " + hookLeadSeconds);
+        }
         this.higgsfieldClient = higgsfieldClient;
         this.higgsfieldConfig = higgsfieldConfig;
         this.difficultyScorer = difficultyScorer;
         this.durationEstimator = durationEstimator;
         this.ttsService = ttsService;
+        this.hookLeadSeconds = hookLeadSeconds;
     }
 
     /**
@@ -217,6 +240,8 @@ public final class StoryApprovalService {
                 GenerationResponse response = higgsfieldClient.submitGeneration(
                         new GenerationRequest(scene.chosenModelId(), parameters));
                 scene.startGeneration(response.requestId(), response.statusUrl());
+                // El corte por defecto es el margen que se pidió de más (0 fuera del GANCHO).
+                scene.setClipStartOffset(leadSecondsFor(scene));
                 succeeded.add(scene.id());
             } catch (RuntimeException e) {
                 failed.put(scene.id(), e.getMessage());
@@ -349,7 +374,12 @@ public final class StoryApprovalService {
         // KnownHiggsfieldPricing) y rechaza con 400 cualquier otro valor, así
         // que la duración cruda de la escena nunca puede llegar tal cual a
         // Higgsfield.
-        long requestedSeconds = secondsRoundedUp(scene.targetDuration());
+        //
+        // En el GANCHO se suma el margen de arranque (hookLeadSeconds) ANTES
+        // de redondear: estimate y generate usan este mismo método, así que
+        // el costo de la PUERTA 2 ya incluye los segundos de más.
+        long leadMillis = Math.round(leadSecondsFor(scene) * 1000);
+        long requestedSeconds = secondsRoundedUp(scene.targetDuration().plusMillis(leadMillis));
         long allowedSeconds = higgsfieldConfig.pricingFor(modelId).roundUpToAllowedDuration(requestedSeconds);
 
         Map<String, Object> parameters = new HashMap<>();
@@ -367,6 +397,11 @@ public final class StoryApprovalService {
         parameters.put("generate_audio", false);
 
         return parameters;
+    }
+
+    /** El margen de arranque de la escena: hookLeadSeconds en el GANCHO, 0 en las demás. */
+    private double leadSecondsFor(Scene scene) {
+        return scene.role() == com.aishorts.engine.domain.SceneRole.GANCHO ? hookLeadSeconds : 0;
     }
 
     private static long secondsRoundedUp(java.time.Duration duration) {

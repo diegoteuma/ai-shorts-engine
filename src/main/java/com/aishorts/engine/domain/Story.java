@@ -20,12 +20,19 @@ public final class Story {
     private final String id;
     private final String topic;
     private final String title;
+    /** Texto en pantalla del GANCHO (2-5 palabras); null en historias sin él (las anteriores a este campo). */
+    private final String hookText;
     private final List<Scene> scenes;
 
     public Story(String id, String topic, String title, List<Scene> scenes) {
+        this(id, topic, title, null, scenes);
+    }
+
+    public Story(String id, String topic, String title, String hookText, List<Scene> scenes) {
         this.id = Objects.requireNonNull(id, "id");
         this.topic = Objects.requireNonNull(topic, "topic");
         this.title = Objects.requireNonNull(title, "title");
+        this.hookText = hookText;
         if (scenes == null || scenes.isEmpty()) {
             throw new IllegalArgumentException("Una historia necesita al menos una escena.");
         }
@@ -37,7 +44,13 @@ public final class Story {
     public String id() { return id; }
     public String topic() { return topic; }
     public String title() { return title; }
+    public String hookText() { return hookText; }
     public List<Scene> scenes() { return scenes; }
+
+    /** La misma historia (las mismas escenas) con otro hookText. */
+    public Story withHookText(String newHookText) {
+        return new Story(id, topic, title, newHookText, scenes);
+    }
 
     // --- presupuesto de duración ---------------------------------------------------------
 
@@ -141,7 +154,7 @@ public final class Story {
 
     /** Captura TODO el estado actual (la historia y sus escenas), para guardarlo. */
     public StorySnapshot toSnapshot() {
-        return new StorySnapshot(id, topic, title,
+        return new StorySnapshot(id, topic, title, hookText,
                 scenes.stream().map(Scene::toSnapshot).collect(Collectors.toUnmodifiableList()));
     }
 
@@ -150,7 +163,7 @@ public final class Story {
         List<Scene> scenes = snapshot.scenes().stream()
                 .map(Scene::fromSnapshot)
                 .collect(Collectors.toUnmodifiableList());
-        return new Story(snapshot.id(), snapshot.topic(), snapshot.title(), scenes);
+        return new Story(snapshot.id(), snapshot.topic(), snapshot.title(), snapshot.hookText(), scenes);
     }
 
     @Override

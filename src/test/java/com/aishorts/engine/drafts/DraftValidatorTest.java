@@ -422,6 +422,102 @@ class DraftValidatorTest {
         assertThat(validate()).isEmpty();
     }
 
+    // --- SOFT: gancho v2 (hookText, título "¿y si…?", GANCHO con el "después") ------------
+
+    /**
+     * Describe lo que muestra el clip tunguska-gancho.mp4 (el bosque ya derribado, el "después"). Escrito para el
+     * test: el visualPrompt guardado en data/stories/tunguska.json está vacío.
+     */
+    private static final String TUNGUSKA_AFTERMATH_PROMPT = ANCHOR + ", one continuous slow aerial shot over the Siberian "
+            + "taiga in the aftermath: a vast flattened forest of already fallen trees under quiet morning mist.";
+
+    @Test
+    void hookText_isReadFromTheModel_andTrimmed() {
+        draft.put("hookText", "  AURORAS EN EL TRÓPICO ");
+        assertThat(validate()).isEmpty();
+        assertThat(lastDraft.hookText).isEqualTo("AURORAS EN EL TRÓPICO");
+    }
+
+    @Test
+    void soft_hookTextMissing() {
+        draft.remove("hookText");
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("HOOK_TEXT_MISSING");
+    }
+
+    @Test
+    void soft_hookTextBlank_countsAsMissing() {
+        draft.put("hookText", "   ");
+        assertOnly(Severity.SOFT, "HOOK_TEXT_MISSING");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"EXPLOSIÓN", "UN BOSQUE ENTERO CAYÓ SIN CRÁTER"})
+    void soft_hookTextOutsideTwoToFiveWords(String hookText) {
+        draft.put("hookText", hookText);
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("HOOK_TEXT_LENGTH");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SIN CRÁTER", "BOSQUE DERRIBADO SIN CRÁTER ALGUNO"})
+    void hookTextAtTheLimits_isNotFlagged(String hookText) {
+        draft.put("hookText", hookText);
+        assertThat(validate()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"¿Y si Tunguska cayera sobre una ciudad?", "Tunguska: y si hubiera caído en una ciudad",
+            "¿Qué pasaría si Tunguska se repitiera hoy?", "¿Que pasaria con una ciudad bajo Tunguska?",
+            "¿Y SI EL CIELO ESTALLARA?"})
+    void soft_titleWhatIf(String title) {
+        draft.put("title", title);
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("TITLE_WHAT_IF");
+        assertThat(violations).allMatch(v -> v.sceneId() == null);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Un bosque entero cayó sin dejar cráter", "Tunguska y Siberia: el bosque que cayó",
+            "Explosión y sismo sobre la taiga", "Lo que pasaría hoy lo vimos en 1908"})
+    void titleThatReformulatesTheHook_isNotFlagged(String title) {
+        draft.put("title", title);
+        assertThat(codes(validate(), Severity.SOFT)).doesNotContain("TITLE_WHAT_IF");
+    }
+
+    @Test
+    void soft_hookAftermath_tunguska() {
+        scene(draft, 0).put("visualPrompt", TUNGUSKA_AFTERMATH_PROMPT);
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("HOOK_AFTERMATH");
+        assertThat(violations).allMatch(v -> "tunguska-x-gancho".equals(v.sceneId()));
+        assertThat(violations).extracting(Violation::message)
+                .anyMatch(m -> m.contains("'aftermath'"))
+                .anyMatch(m -> m.contains("'flattened'"))
+                .anyMatch(m -> m.contains("'already fallen'"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"aftermath", "Devastated", "flattened", "RUINS", "remains of", "already fallen"})
+    void soft_hookAftermath_eachTerm(String term) {
+        scene(draft, 0).put("visualPrompt", ANCHOR + ", one continuous shot over the taiga, " + term + " trees.");
+        assertOnly(Severity.SOFT, "HOOK_AFTERMATH");
+    }
+
+    @Test
+    void hookAtItsPeak_orAftermathOutsideTheHook_isNotFlagged() {
+        scene(draft, 0).put("visualPrompt", ANCHOR + ", one continuous wide shot. At 0 seconds the frame already shows a "
+                + "white-hot fireball expanding high above the taiga at real-time speed.");
+        scene(draft, 1).put("visualPrompt", TUNGUSKA_AFTERMATH_PROMPT); // EXPLICACION: la regla es solo del GANCHO
+        scene(draft, 0).put("narrationText", "Una ruina " + words(10)); // la narración no cuenta, solo el prompt
+        draft.put("title", "Ruins del bosque: explosión en la taiga");
+        assertThat(validate()).isEmpty();
+    }
+
     @Test
     void soft_absoluteInTitle_carrington() {
         draft.put("title", "1859: la tormenta solar más intensa jamás registrada");

@@ -56,6 +56,11 @@ export function buildTimeline(story, { durationOverrides = {} } = {}) {
     }
     const duration = durationOverrides[s.id] ?? parseDuration(s.targetDuration);
     if (!(duration > 0)) throw new Error(`La escena ${s.id} tiene una duración no positiva (${duration}).`);
+    // Desde qué segundo del clip se muestra la escena (backend: Scene.clipStartOffset). Ausente en historias viejas: 0.
+    const clipStartOffset = s.clipStartOffset ?? 0;
+    if (typeof clipStartOffset !== "number" || !Number.isFinite(clipStartOffset) || clipStartOffset < 0) {
+      throw new Error(`La escena ${s.id} tiene un clipStartOffset inválido (${JSON.stringify(s.clipStartOffset)}): debe ser un número de segundos >= 0.`);
+    }
 
     const start = round6(cursor);
     scenes.push({
@@ -65,9 +70,32 @@ export function buildTimeline(story, { durationOverrides = {} } = {}) {
       narrationText: s.narrationText,
       start,
       duration: round6(duration),
+      clipStartOffset: round6(clipStartOffset),
     });
     cursor = round6(start + duration);
   }
 
   return { scenes, totalDuration: round6(cursor) };
+}
+
+/** Texto en pantalla del gancho (backend: Story.hookText). Ausente, null o vacío: null (no se dibuja nada). */
+export function readHookText(story) {
+  const hookText = story?.hookText;
+  if (hookText === undefined || hookText === null) return null;
+  if (typeof hookText !== "string") throw new Error(`hookText debe ser texto, llegó: ${JSON.stringify(hookText)}`);
+  return hookText.trim() === "" ? null : hookText.trim();
+}
+
+/**
+ * El clip de la escena alcanza si clipStartOffset + duración de la escena <= duración del clip (1 ms de tolerancia,
+ * la misma que el aviso de clip corto). Devuelve el mensaje de error, o null si alcanza.
+ */
+export function clipFitError(scene, clipDuration) {
+  const needed = scene.clipStartOffset + scene.duration;
+  if (needed <= clipDuration + 0.001) return null;
+  return (
+    `${scene.id}: el clip dura ${clipDuration.toFixed(3)} s y con clipStartOffset ${scene.clipStartOffset.toFixed(3)} s ` +
+    `la escena (${scene.duration.toFixed(3)} s) necesita hasta el segundo ${needed.toFixed(3)}. ` +
+    `Bajar el offset a ${Math.max(0, clipDuration - scene.duration).toFixed(3)} s o menos (POST /stories/{id}/clip-offsets).`
+  );
 }

@@ -19,6 +19,10 @@ public final class Mp4Fixtures {
     private boolean includeMdat = true;
     private boolean largeMdatHeader = false;
     private String handler = "vide";
+    /** null = sin caja mdhd (como los fixtures anteriores a la duración). */
+    private Integer mdhdVersion;
+    private long mdhdTimescale;
+    private long mdhdDuration;
     private final int width;
     private final int height;
 
@@ -66,6 +70,14 @@ public final class Mp4Fixtures {
         return this;
     }
 
+    /** Agrega un mdhd (versión 0 o 1) con esa duración en unidades de timescale. */
+    public Mp4Fixtures mediaDuration(int version, long timescale, long duration) {
+        this.mdhdVersion = version;
+        this.mdhdTimescale = timescale;
+        this.mdhdDuration = duration;
+        return this;
+    }
+
     public byte[] build() {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -88,7 +100,7 @@ public final class Mp4Fixtures {
     private byte[] moov() throws IOException {
         byte[] tkhd = box("tkhd", tkhdPayload());
         byte[] hdlr = box("hdlr", hdlrPayload());
-        byte[] mdia = box("mdia", hdlr);
+        byte[] mdia = box("mdia", mdhdVersion == null ? hdlr : concat(box("mdhd", mdhdPayload()), hdlr));
         byte[] trak = box("trak", concat(tkhd, mdia));
         return box("moov", trak);
     }
@@ -133,6 +145,26 @@ public final class Mp4Fixtures {
         }
         out.writeInt(width << 16);
         out.writeInt(height << 16);
+        return bos.toByteArray();
+    }
+
+    private byte[] mdhdPayload() throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        DataOutputStream out = new DataOutputStream(bos);
+        out.writeInt(mdhdVersion << 24);  // version + flags
+        if (mdhdVersion == 1) {
+            out.writeLong(0);             // creation
+            out.writeLong(0);             // modification
+            out.writeInt((int) mdhdTimescale);
+            out.writeLong(mdhdDuration);
+        } else {
+            out.writeInt(0);              // creation
+            out.writeInt(0);              // modification
+            out.writeInt((int) mdhdTimescale);
+            out.writeInt((int) mdhdDuration);
+        }
+        out.writeShort(0x55C4);           // language "und"
+        out.writeShort(0);                // pre_defined
         return bos.toByteArray();
     }
 

@@ -37,6 +37,7 @@ public final class SnapshotMapper {
         map.put("id", story.id());
         map.put("topic", story.topic());
         map.put("title", story.title());
+        map.put("hookText", story.hookText());
         List<Object> scenes = new ArrayList<>();
         for (SceneSnapshot scene : story.scenes()) {
             scenes.add(toMap(scene));
@@ -50,11 +51,13 @@ public final class SnapshotMapper {
         String id = str(map, "id");
         String topic = str(map, "topic");
         String title = str(map, "title");
+        // Ausente en los JSON guardados antes de existir el campo: str() devuelve null.
+        String hookText = str(map, "hookText");
         List<SceneSnapshot> scenes = new ArrayList<>();
         for (Object raw : (List<Object>) map.getOrDefault("scenes", List.of())) {
             scenes.add(toSceneSnapshot((Map<String, Object>) raw));
         }
-        return new StorySnapshot(id, topic, title, scenes);
+        return new StorySnapshot(id, topic, title, hookText, scenes);
     }
 
     private static Map<String, Object> toMap(SceneSnapshot scene) {
@@ -81,6 +84,7 @@ public final class SnapshotMapper {
         map.put("generationFailureReason", scene.generationFailureReason());
         map.put("localClipPath", scene.localClipPath());
         map.put("localClipFailureReason", scene.localClipFailureReason());
+        map.put("clipStartOffset", scene.clipStartOffset());
         return map;
     }
 
@@ -109,7 +113,9 @@ public final class SnapshotMapper {
                 str(map, "generationFailureReason"),
                 // Ausentes en los JSON guardados antes de existir la copia local: str() devuelve null.
                 str(map, "localClipPath"),
-                str(map, "localClipFailureReason")
+                str(map, "localClipFailureReason"),
+                // Ausente en los JSON guardados antes de existir el corte: 0 (el clip desde el inicio).
+                doubleOrZero(map, "clipStartOffset")
         );
     }
 
@@ -158,6 +164,13 @@ public final class SnapshotMapper {
         Object value = map.get(key);
         if (value instanceof Number number) return number.intValue();
         throw new PersistenceException("Falta o no es numérico el campo '" + key + "' en el JSON guardado.");
+    }
+
+    private static double doubleOrZero(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        if (value == null) return 0;
+        if (value instanceof Number number) return number.doubleValue();
+        throw new PersistenceException("El campo '" + key + "' del JSON guardado no es numérico: " + value);
     }
 
     private static BigDecimal toBigDecimal(Object value) {

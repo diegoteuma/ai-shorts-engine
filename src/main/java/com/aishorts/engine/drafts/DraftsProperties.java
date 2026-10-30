@@ -28,6 +28,7 @@ public record DraftsProperties(
         List<String> forbiddenVisualTerms,
         List<String> negativePromptTerms,
         List<String> slowRevealTerms,
+        List<String> hookAftermathTerms,
         List<String> absoluteTerms,
         List<String> tierADomains,
         List<String> tierBDomains,
@@ -55,6 +56,7 @@ public record DraftsProperties(
         forbiddenVisualTerms = forbiddenVisualTerms != null ? forbiddenVisualTerms : List.of();
         negativePromptTerms = negativePromptTerms != null ? negativePromptTerms : List.of();
         slowRevealTerms = slowRevealTerms != null ? slowRevealTerms : List.of();
+        hookAftermathTerms = hookAftermathTerms != null ? hookAftermathTerms : List.of();
         absoluteTerms = absoluteTerms != null ? absoluteTerms : List.of();
         tierADomains = tierADomains != null ? tierADomains : List.of();
         tierBDomains = tierBDomains != null ? tierBDomains : List.of();

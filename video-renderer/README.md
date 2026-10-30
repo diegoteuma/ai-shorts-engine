@@ -17,6 +17,7 @@ Vive **fuera del backend Java** a propósito: el backend termina cuando cada esc
 | Transcripciones reales vs. las de las pruebas | Reproducido el 2026-10-12 con `compare-transcripts` (CLI 0.8.143, Windows): mismas palabras y 0.0 ms de desfase; difieren solo puntuación y mayúsculas en 2 escenas ("Rusia:" vs "Rusia.") |
 | El flag `--render` de `generate.mjs` | **No ejecutado** (solo revisado estáticamente). No usarlo: no fija versión, ni workers, ni timeout. Para renderizar usar `make-video.mjs` |
 | `src/make-video.mjs` (todo en un comando) | Probado con CLI y ffprobe **simulados** (18 pruebas). Corrida **real** una vez en Windows con tunguska: COMPLETED en 3 min 10 s (transcribe 76 s, check 47 s, render 61 s), MP4 720×1280 con audio de 37.433 s. **En Linux/VM no se ejecutó** (ni symlinks ni la muerte del grupo de procesos) |
+| `hookText` y `clipStartOffset` (2026-10-30, Windows, CLI 0.8.143, tunguska) | `lint` 0 errores (1 aviso de tamaño, como siempre) y `check` exit 0 con y sin `hookText` (21/21 textos con contraste WCAG AA con el gancho). `render` real con offset 0.5 s en el GANCHO: el fotograma t del MP4 coincide con el t + 0.5 s del clip (PSNR ≈ 36.4 dB en t = 0, 1 y 1.5 s, contra ≈ 24.7 dB con el t), así que `data-media-start` ≠ 0 se respeta; control con offset 0: coincide con el t del clip (35.4 dB vs 19.7). Con la máquina cargada (tests en paralelo) `check` falló una vez por `Navigation timeout of 10000 ms` y `render` por `FFmpeg cannot start`; sin carga, pasaron |
 | Segunda historia distinta de "tunguska" | **No probado** |
 | Ejecución en GCP | **No probado** |
 
@@ -98,6 +99,11 @@ Las reglas editoriales piden escribir números y fechas "de forma que se lean si
 - Un año se escribe sin separador (**1815**, no 1.815); de 5 cifras en adelante se agrupa con espacio duro ("10 000").
 - Todo lo convertido se imprime como `CIFRA ...` y queda en `generation-report.json` (`numeralConversions`) para revisarlo. `--numerals off` muestra el texto tal cual.
 - Es un puente: lo estructural sería que el generador de historias emita un texto para voz y otro para pantalla.
+
+## Gancho: texto en pantalla (`hookText`) y corte del clip (`clipStartOffset`)
+
+- **`hookText`** (opcional, de la `Story`): 2-5 palabras que se dibujan grandes en el tercio superior (Montserrat 800, blanco sobre caja oscura con borde rojo), **visibles ya en el fotograma 0** (sin fundido de entrada) hasta el fin de la escena GANCHO, con un acercamiento lineal leve y un fundido de salida de 0.15 s. El texto va escapado dentro del HTML y nunca dentro del `<script>` (el JS solo lee el DOM para ajustar el tamaño). Ausente, `null` o vacío: no se dibuja nada y el `index.html` es **idéntico** al de antes (prueba golden). Sin escena GANCHO se usa la primera escena y se avisa.
+- **`clipStartOffset`** (por escena, segundos, default 0): va a `data-media-start` del `<video>`; la línea de tiempo no cambia, solo qué parte del clip se ve. Debe ser un número >= 0 (si no, `buildTimeline` falla). Con offset > 0, `generate.mjs` mide el clip con `ffprobe` y **falla** si `offset + duración de la escena` supera la duración del clip (1 ms de tolerancia), o si no lo puede medir; `--no-check-media` saltea la comprobación. Con offset 0 se mantiene el aviso de antes para clips cortos.
 
 ## Aviso `duplicate_audio_track` del lint
 

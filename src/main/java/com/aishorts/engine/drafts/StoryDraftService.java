@@ -327,17 +327,21 @@ public final class StoryDraftService {
                     + "); solo se edita un borrador PENDING_REVIEW.");
         }
         if (edit.isEmpty()) {
-            throw new DraftException(400, "No hay nada que editar: manda 'title', 'narrationEdits' y/o 'promptEdits'.");
+            throw new DraftException(400, "No hay nada que editar: manda 'title', 'hookText', 'narrationEdits' y/o 'promptEdits'.");
         }
         if (edit.title() != null && edit.title().isBlank()) {
             throw new DraftException(400, "'title' no puede quedar vacío.");
         }
+        checkHookText(edit.hookText());
         Map<String, DraftScene> scenesById = scenesById(draft);
         checkEdits(edit.narrationEdits(), scenesById, "narrationEdits");
         checkEdits(edit.promptEdits(), scenesById, "promptEdits");
 
         if (edit.title() != null) {
             draft.title = edit.title().strip();
+        }
+        if (edit.hookText() != null) {
+            draft.hookText = edit.hookText().strip();
         }
         applyEdits(scenesById, edit.narrationEdits(), edit.promptEdits());
         normalizer.recalculate(draft, draft.researchedUrls, accessedDate(draft));
@@ -376,7 +380,11 @@ public final class StoryDraftService {
             return new DecisionOutcome(draft, null);
         }
 
+        checkHookText(decision.hookText());
         applyEdits(scenesById, decision.narrationEdits(), decision.promptEdits());
+        if (decision.hookText() != null) {
+            draft.hookText = decision.hookText().strip();
+        }
         normalizer.recalculate(draft, draft.researchedUrls, accessedDate(draft));
         // Al aprobar, el propio id del borrador no cuenta como ocupado; una Story existente se rechaza abajo con 409.
         List<Violation> violations = validator.validate(draft,
@@ -423,6 +431,13 @@ public final class StoryDraftService {
         }
     }
 
+    /** null = no se cambia; vacío no se acepta (el aviso SOFT de hookText ausente es para lo que trae el modelo). */
+    private static void checkHookText(String hookText) {
+        if (hookText != null && hookText.isBlank()) {
+            throw new DraftException(400, "'hookText' no puede quedar vacío.");
+        }
+    }
+
     private static void checkEdits(List<DraftDecision.SceneTextEdit> edits, Map<String, DraftScene> scenesById, String field) {
         for (DraftDecision.SceneTextEdit edit : edits) {
             if (edit == null || edit.sceneId() == null || !scenesById.containsKey(edit.sceneId())) {
@@ -450,7 +465,8 @@ public final class StoryDraftService {
         }
         StoryBrief brief = new StoryBrief(draft.topic, draft.title, coreFacts, List.of(), PIPELINE_BUDGET);
         ScriptDraftingService reviewedScenes = ignored -> sceneDrafts;
-        return new StoryDraftingService(reviewedScenes, pipelineEstimator).draftStory(draft.id, brief);
+        Story story = new StoryDraftingService(reviewedScenes, pipelineEstimator).draftStory(draft.id, brief);
+        return story.withHookText(draft.hookText);
     }
 
     // --- helpers -----------------------------------------------------------------------------

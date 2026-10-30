@@ -165,6 +165,13 @@ public final class FinalVideoService {
         return job;
     }
 
+    /** true si el render en curso (PENDING o RUNNING) es de esta historia. */
+    public boolean isRendering(String storyId) {
+        synchronized (lock) {
+            return active != null && active.storyId().equals(storyId);
+        }
+    }
+
     /** El MP4 si el trabajo vigente está COMPLETED. */
     public Optional<Path> finalVideo(String storyId) {
         return current(storyId)
