@@ -30,6 +30,8 @@ public record DraftsProperties(
         List<String> slowRevealTerms,
         List<String> hookAftermathTerms,
         List<String> absoluteTerms,
+        List<String> calmVisualTerms,
+        List<String> humanScaleTerms,
         List<String> tierADomains,
         List<String> tierBDomains,
         List<String> orientationOnlyDomains
@@ -58,6 +60,8 @@ public record DraftsProperties(
         slowRevealTerms = slowRevealTerms != null ? slowRevealTerms : List.of();
         hookAftermathTerms = hookAftermathTerms != null ? hookAftermathTerms : List.of();
         absoluteTerms = absoluteTerms != null ? absoluteTerms : List.of();
+        calmVisualTerms = calmVisualTerms != null ? calmVisualTerms : List.of();
+        humanScaleTerms = humanScaleTerms != null ? humanScaleTerms : List.of();
         tierADomains = tierADomains != null ? tierADomains : List.of();
         tierBDomains = tierBDomains != null ? tierBDomains : List.of();
         orientationOnlyDomains = orientationOnlyDomains != null ? orientationOnlyDomains : List.of();

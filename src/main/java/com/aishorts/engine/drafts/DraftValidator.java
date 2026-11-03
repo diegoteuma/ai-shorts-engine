@@ -44,6 +44,8 @@ public final class DraftValidator {
     private final Map<String, Pattern> slowRevealTerms;
     private final Map<String, Pattern> hookAftermathTerms;
     private final Map<String, Pattern> absoluteTerms;
+    private final Map<String, Pattern> calmVisualTerms;
+    private final Map<String, Pattern> humanScaleTerms;
 
     /** Texto en pantalla del GANCHO: de 2 a 5 palabras (SOFT). */
     static final int MIN_HOOK_TEXT_WORDS = 2;
@@ -83,6 +85,8 @@ public final class DraftValidator {
         this.slowRevealTerms = compileTerms(properties.slowRevealTerms());
         this.hookAftermathTerms = compileTerms(properties.hookAftermathTerms());
         this.absoluteTerms = compileTerms(properties.absoluteTerms());
+        this.calmVisualTerms = compileTerms(properties.calmVisualTerms());
+        this.humanScaleTerms = compileTerms(properties.humanScaleTerms());
     }
 
     public List<Violation> validate(StoryDraft draft, Context context) {
@@ -95,6 +99,7 @@ public final class DraftValidator {
         validateTitleWhatIf(draft, violations);
         validateHookText(draft, violations);
         validateScenes(draft, claimsById, violations);
+        validateHumanScale(draft, violations);
         validateWhatIf(draft, claimsById, violations);
         validateSources(draft, researched, violations);
         validateDuplicateTopic(draft, context, violations);
@@ -269,6 +274,12 @@ public final class DraftValidator {
             violations.add(Violation.softScene("STYLE_ANCHOR", scene.id, where
                     + ": el visualPrompt no empieza con el ancla de estilo \"" + anchor + "\"."));
         }
+        calmVisualTerms.forEach((term, pattern) -> {
+            if (pattern.matcher(prompt).find()) {
+                violations.add(Violation.softScene("CALM_VISUAL", scene.id, where + ": el visualPrompt contiene '"
+                        + term + "'; ningún rol es sereno ni contemplativo: la amenaza debería estar presente en cuadro."));
+            }
+        });
         String narration = scene.narrationText != null ? scene.narrationText : "";
         if (role == SceneRole.GANCHO) {
             if (HOOK_DATE_START.matcher(narration).find()) {
@@ -297,6 +308,23 @@ public final class DraftValidator {
             });
         }
         return scene.words;
+    }
+
+    // --- SOFT: escala humana ---------------------------------------------------------------
+
+    /** Ningún visualPrompt nombra personas: sin escala humana en cuadro no hay magnitud ni emoción. */
+    private void validateHumanScale(StoryDraft draft, List<Violation> violations) {
+        List<DraftScene> scenes = DraftRules.scenes(draft);
+        if (humanScaleTerms.isEmpty() || scenes.isEmpty()) {
+            return;
+        }
+        boolean anyHuman = scenes.stream()
+                .filter(scene -> scene != null && scene.visualPrompt != null)
+                .anyMatch(scene -> humanScaleTerms.values().stream().anyMatch(p -> p.matcher(scene.visualPrompt).find()));
+        if (!anyHuman) {
+            violations.add(Violation.soft("NO_HUMAN_SCALE", "Ningún visualPrompt muestra personas: al menos una escena "
+                    + "debería tener personas anónimas (siluetas, una multitud a distancia, de espaldas) para dar escala."));
+        }
     }
 
     // --- HARD: what-if ---------------------------------------------------------------------

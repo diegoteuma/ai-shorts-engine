@@ -221,7 +221,11 @@ POST /story-drafts/{id}/decision    PUERTA 0: {decision: APPROVE|REJECT, note?, 
   claims HIPOTESIS, y `visualPrompt` sin palabras prohibidas ni bloques de
   negativos. **Blandas** (avisos): palabras fuera de la tabla por rol, falta
   el ancla de estilo, URL no consultada, fuentes débiles, tema repetido,
-  dominio sin tier, slug renombrado.
+  dominio sin tier, slug renombrado, `CALM_VISUAL` (un `visualPrompt` con
+  `calm`, `serene`, `quiet`… de `app.drafts.calm-visual-terms`) y
+  `NO_HUMAN_SCALE` (ningún `visualPrompt` nombra personas de
+  `app.drafts.human-scale-terms`). El tono de las reglas es de documental de
+  catástrofe, tenso y urgente, con las mismas exigencias de claims y fuentes.
 - **Nunca se sobrescribe** un borrador ni una historia: si el slug choca, el
   servidor lo renombra (`slug-2`, con los ids de escena re-prefijados) y lo
   avisa.
@@ -634,6 +638,33 @@ mvn test
   mata también al hijo). `FinalVideoNodeContractTest` corre el
   `make-video.mjs` real con la CLI de HyperFrames simulada (se omite si no
   hay `node` en el PATH).
+
+## Voz: `voice_settings` de ElevenLabs (opcional)
+
+Por defecto no se envía `voice_settings` y la voz usa sus valores guardados.
+Para probar una lectura más tensa, definí alguna de estas variables (solo se
+envían las que tengan valor):
+
+| Variable | Clave (`elevenlabs.voice-settings.*`) | Default de la API | Sugerido para probar |
+|---|---|---|---|
+| `ELEVENLABS_STABILITY` | `stability` | 0.5 | 0.35 (más baja = más rango emocional) |
+| `ELEVENLABS_SIMILARITY_BOOST` | `similarity-boost` | 0.75 | sin tocar |
+| `ELEVENLABS_STYLE` | `style` | 0 | 0.3 (exageración del estilo) |
+| `ELEVENLABS_USE_SPEAKER_BOOST` | `use-speaker-boost` | true | sin tocar |
+| `ELEVENLABS_SPEED` | `speed` | 1 | sin tocar (ver riesgo) |
+
+Los defaults salen de la referencia de
+[`with-timestamps`](https://elevenlabs.io/docs/api-reference/text-to-speech/convert-with-timestamps).
+Esa página no publica rangos ni qué campos aplica cada modelo, así que el
+código no valida los valores. Los sugeridos son un punto de partida, no un
+valor medido.
+
+**Riesgo:** `speed` distinto de 1, y probablemente un `style` alto, cambian el
+ritmo de lectura. La calibración de 2,65 palabras/s (`app.drafts.words-per-second`),
+los presupuestos de 92-104 palabras y 35-40 s y los avisos de duración están
+medidos con la voz por defecto. Después de cambiar la voz, compará la duración
+real del audio de una historia contra la estimada antes de confiar en esos avisos.
+La documentación además dice que `style` distinto de 0 "might increase latency".
 
 ## Pendiente / próximos pasos
 

@@ -31,7 +31,7 @@ final class DraftFixtures {
     static final List<String> RESEARCHED = List.of(NASA, BRITANNICA, USGS, SMITHSONIAN);
 
     static final String HOOK_TEXT = "EXPLOSIÓN SIN CRÁTER";
-    static final String ANCHOR ="Hyperrealistic cinematic documentary footage, vertical 9:16 composition";
+    static final String ANCHOR = "Hyperrealistic cinematic disaster documentary footage, vertical 9:16 composition";
     static final String[] ROLES = {"GANCHO", "EXPLICACION", "CONTEXTO", "GIRO", "CONSECUENCIA", "CIERRE"};
     /** Dentro del rango de cada rol; total 94 (92-104), cada escena entre 3 y 8 s a 2.65 palabras/s. */
     static final int[] WORDS = {12, 19, 18, 15, 18, 12};
@@ -67,7 +67,7 @@ final class DraftFixtures {
             scene.put("role", ROLES[i]);
             scene.put("order", i + 1);
             scene.put("narrationText", words(WORDS[i]));
-            scene.put("visualPrompt", ANCHOR + ", one continuous wide aerial shot over a dense taiga forest at dawn, soft volumetric light, realistic scale.");
+            scene.put("visualPrompt", ANCHOR + ", one continuous wide aerial shot over a dense taiga forest at dawn, the distant silhouette of a herder on a ridge, soft volumetric light, realistic scale.");
             scene.put("visualConstraints", List.of("the forest reaches the horizon"));
             scene.put("claimIds", new ArrayList<>(claimIds.get(i)));
             scene.put("words", 99); // valor falso del modelo: el servidor lo recalcula
