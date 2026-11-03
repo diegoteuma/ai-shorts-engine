@@ -38,7 +38,7 @@ Un buen tema cumple **todo** esto:
 | 3 | CONTEXTO | Cuándo, dónde, quiénes; fecha y lugar exactos | 6-8 s | 16-20 |
 | 4 | GIRO | Pivote explícito hacia la hipótesis: aquí el espectador debe entender que **deja de hablarse de hechos** | 5-7 s | 13-17 |
 | 5 | CONSECUENCIA | Qué habría pasado, con orden de magnitud fundado en los parámetros reales | 6-8 s | 16-20 |
-| 6 | CIERRE | Una pregunta o reflexión que conecta con el presente | 3.5-5 s | 8-12 |
+| 6 | CIERRE | Una pregunta o un hecho real del presente que deja la amenaza abierta | 3.5-5 s | 8-12 |
 
 Reglas duras: **total entre 92 y 104 palabras**; ninguna escena de más de 8 s (~21 palabras) ni de menos de 3 s; una idea por escena. Escenas 1-3 son REAL, 4-5 son IF, 6 cierra.
 
@@ -48,11 +48,13 @@ Reglas duras: **total entre 92 y 104 palabras**; ninguna escena de más de 8 s (
 
 **Texto en pantalla del gancho (`hookText`).** De **2 a 5 palabras**, en español, que nombran la anomalía o la cifra central (por ejemplo "AURORAS EN EL TRÓPICO", "EXPLOSIÓN SIN CRÁTER"). Se muestra grande desde el primer fotograma. Debe estar respaldado por una claim de la escena GANCHO, igual que la narración: nada que la narración y sus fuentes no sostengan. Sin signos de pregunta ni "¿y si…?".
 
+**Detalle humano real (EXPLICACION o CONTEXTO).** Al menos una de esas dos escenas incluye un hecho sensorial o humano **documentado** que dé escala: lo que la gente vio, oyó o perdió (por ejemplo, tímpanos reventados, ventanas rotas a X kilómetros, el cielo oscuro a mediodía, cosechas perdidas). Es una afirmación más: lleva su claim y cumple el mismo estándar de fuentes de la sección 6. Si no encuentras uno con 2 fuentes, no lo inventes: dilo en `risks`.
+
 **GIRO.** Debe contener una marca inequívoca de hipótesis ("Ahora imaginemos…", "¿Y si…?") y plantear **una sola** variable cambiada. A partir de aquí todo el lenguaje va en condicional ("habría", "podría").
 
-**CONSECUENCIA.** Efectos derivados de los parámetros del evento real, no inventados. Prefiere efectos físicos (edificios, vidrios, radio de daño) a cifras de víctimas. Solo cita cifras de víctimas si salen de un estudio publicado, con rango y fuente; si no, cualitativo.
+**CONSECUENCIA.** Efectos derivados de los parámetros del evento real, no inventados, en **escala humana**: qué le pasaría hoy a la vida diaria de alguien (luz, agua, comunicaciones, comida, evacuación). Cuando se pueda, en **segunda persona** y en condicional ("tu teléfono se quedaría sin señal", "en tu ciudad se romperían los vidrios"). "Tu ciudad" es genérica: la regla de la sección 5 sobre ciudades reales sigue valiendo. Prefiere efectos físicos y cotidianos (edificios, vidrios, apagones, radio de daño) a cifras de víctimas. Solo cita cifras de víctimas si salen de un estudio publicado, con rango y fuente; si no, cualitativo.
 
-**CIERRE.** Una pregunta concreta o una reflexión que conecte con el presente (por ejemplo, qué hacemos hoy para detectar o prevenir algo así). Solo pregunta o reflexión: sin "suscríbete" ni llamados a la acción.
+**CIERRE.** Inquietante, no contemplativo: una pregunta concreta o un hecho real del presente que deje la amenaza abierta (por ejemplo, que el fenómeno se repite, que hoy no hay forma de detectarlo a tiempo). Una afirmación de recurrencia ("y volverá a pasar") solo si una fuente la sostiene: entonces es un hecho, va en `claims` con `claimIds` en el CIERRE y con el mismo estándar de fuentes de la sección 6. Sin "suscríbete" ni llamados a la acción.
 
 ## 5. REAL + IF: la frontera
 
@@ -92,7 +94,11 @@ Reglas:
 - Frases cortas. Un solo sujeto y una sola idea por frase. Sin paréntesis, comillas innecesarias, emojis, hashtags ni acotaciones.
 - Números y fechas escritos de forma que se lean sin ambigüedad ("treinta de junio de 1908"; las cifras grandes en palabras o con "millones"). Evita siglas poco conocidas; si una es imprescindible, explícala o escríbela como se pronuncia.
 - La puntuación marca las pausas: coma para un respiro, punto para cortar.
-- Tono sobrio de documental: sin sensacionalismo, sin humor, sin juicios morales.
+- Tono de **documental de catástrofe, tenso y urgente**, sin humor ni juicios morales:
+  - En las escenas REAL (1-3), **presente histórico** ("La isla estalla", no "La isla estalló"). Las escenas IF siguen en condicional.
+  - Verbos de acción concretos. Frases cortas que escalan.
+  - **Cada escena sube la tensión** respecto de la anterior: ninguna escena "baja" ni se detiene a respirar.
+  - El dramatismo sale de **detalles reales**, no de adjetivos: siguen prohibidos los adjetivos vacíos ("increíble", "impactante") y las cifras más llamativas que las documentadas. Tenso no es exagerado.
 - **Verifica el presupuesto antes de responder**: cuenta las palabras de cada escena y el total (92-104) y calcula los segundos con 2.65 palabras/s. Si te sales, reescribe.
 - El `title` reformula el gancho: nombra la anomalía o el dato del hecho real, **sin "¿y si…?" ni "qué pasaría si"** (la hipótesis no va en el título). Malo: "¿Y si Tunguska cayera sobre una ciudad?". Bueno: "Un bosque entero cayó sin dejar cráter".
 - El `title` debe ser honesto: coherente con lo que dice el video, máximo ~60 caracteres y sin clickbait que el contenido no cumpla. Puede llevar una cifra solo si es la mejor estimación documentada, tiene 2 fuentes tier A/B y se enmarca como tal ("unos", "cerca de").
@@ -102,22 +108,22 @@ Reglas:
 Un prompt por escena para un modelo de **texto a video** (Wan 3.0 Prime u otro), que genera un clip de 3-8 s a 720p en 9:16. Reglas:
 
 1. **En inglés, y todo en positivo.** Estos modelos no tienen campo de prompt negativo: lo que nombres, aparece. No escribas bloques de "evitar…" ni listas de negativos, ni uses "do not", "does not", "without" o "never".
-2. **Ancla de estilo común** al comienzo de los 6 prompts, para que los clips empalmen: `Hyperrealistic cinematic documentary footage, vertical 9:16 composition`. Sin las palabras *animated, diagram, illustration, vector, cartoon, infographic* (producen dibujo animado), salvo que el sistema pida explícitamente ese estilo.
+2. **Ancla de estilo común** al comienzo de los 6 prompts, para que los clips empalmen: `Hyperrealistic cinematic disaster documentary footage, vertical 9:16 composition`. Sin las palabras *animated, diagram, illustration, vector, cartoon, infographic* (producen dibujo animado), salvo que el sistema pida explícitamente ese estilo.
 3. **Una sola toma continua**: describe el encuadre y el movimiento de cámara ("one continuous ultra-wide aerial side-view shot"), el lugar, la hora y la luz.
 4. **Orden explícito de eventos** con palabras de secuencia ("first… a fraction of a second later… then…"). Máximo **2-3 eventos** por clip: un clip de 5-8 s no resiste más; si algo no cabe, recórtalo.
 5. **Física correcta tomada de las afirmaciones.** Cada escena lleva `visualConstraints`: hechos que la imagen debe respetar (altura, dirección, ausencia de cráter, escala, etc.). Descríbelos con medidas visuales ("kilometers above the treetops", "the sky stays wide and open between the burst and the forest").
-6. **Escala** con referencias visuales (un bosque hasta el horizonte, una ciudad entera en cuadro), no con cifras.
-7. **Velocidad**: pide el ritmo real con verbos de acción y "at real-time speed" cuando el efecto deba ser súbito (los modelos tienden a movimiento lento por defecto).
-8. Sin texto, etiquetas, logos ni subtítulos en pantalla; sin personas reales identificables; sin sufrimiento gráfico.
+6. **Escala** con referencias visuales (un bosque hasta el horizonte, una ciudad entera en cuadro, personas pequeñas frente al fenómeno), no con cifras.
+7. **Velocidad e impacto**: pide el ritmo real con verbos de acción y "at real-time speed" en **todo** efecto súbito (los modelos tienden a movimiento lento por defecto). Lenguaje visual de impacto: cámara en mano o con temblor (*handheld camera shake*) cuando haya onda expansiva o sismo; humanos en cuadro para dar escala; contraste alto y luz dura. **Al menos un evento visible por clip**: ningún clip estático.
+8. Sin texto, etiquetas, logos ni subtítulos en pantalla; sin personas reales identificables; sin sufrimiento gráfico, heridas ni cuerpos. Sí se permiten, y se buscan, **personas anónimas** que den escala y emoción: siluetas, una multitud que mira el cielo, gente que huye a lo lejos, siempre de espaldas o a distancia.
 9. **Evita palabras que activan clichés**. En una explosión aérea, por ejemplo, *impact, crash, crater, mushroom cloud, ground blast*: los modelos tienden a dibujar la explosión contra el suelo con hongo. Describe lo que sí pasa ("detonates high in the sky", "pressure wave sweeping outward across the canopy").
 10. Debe **coincidir con la narración** del momento: no ilustres otra cosa.
-11. Criterio por rol:
+11. Criterio por rol (**ningún rol es sereno ni contemplativo**; evita *calm, serene, peaceful, tranquil, quiet, gentle, contemplative, still, idyllic*):
     - GANCHO: **el evento en su pico, no el después.** Muestra el momento de máxima acción del hecho real (la explosión, la erupción, la aurora en pleno cielo), con movimiento rápido y visible. Prohibido usar para el GANCHO el resultado o las consecuencias (bosque derribado, ciudad en ruinas, cenizas, paisaje devastado; palabras como *aftermath, devastated, flattened, ruins, remains of, already fallen*): eso va en otra escena. Escribe qué se ve en el instante 0: *"At 0 seconds the frame already shows …"*. Prohibido abrir con un plano tranquilo y llegar al elemento por panorámica, inclinación o revelación (*tilt up to reveal, pan to reveal, slowly reveals, starting on a calm…*). El movimiento de cámara puede continuar, pero el sujeto está en cuadro, en plena acción, desde el inicio.
     - EXPLICACION: el mecanismo físico en imagen real y verosímil (no diagrama).
-    - CONTEXTO: lugar y época, sereno; un look de archivo histórico es válido si dice *photorealistic*.
-    - GIRO: un plano establecido del escenario hipotético; evita morphing y pantalla dividida (los modelos suelen resolverlos mal).
-    - CONSECUENCIA: los efectos hipotéticos, realistas, con la física del evento escalada.
-    - CIERRE: una composición simple y contemplativa.
+    - CONTEXTO: el lugar y la época reales con **la amenaza ya presente** (una columna de humo en el horizonte, un cielo anómalo, gente que mira hacia arriba). Tensión previa, no postal. Un look de archivo histórico es válido si dice *photorealistic*.
+    - GIRO: la ciudad moderna del escenario hipotético con **la amenaza ya visible y movimiento** (tráfico, gente, luces, el fenómeno avanzando), no un skyline quieto; evita morphing y pantalla dividida (los modelos suelen resolverlos mal).
+    - CONSECUENCIA: los efectos hipotéticos, realistas, con la física del evento escalada y personas anónimas en cuadro.
+    - CIERRE: una imagen con tensión (la ciudad de noche con la amenaza en el horizonte, la pantalla de un teléfono que parpadea en rojo, descrita solo por su luz y su color, porque nombrar un texto hace que aparezca; una multitud que mira el cielo).
 
 Referencia de un prompt que funcionó bien (escena de explicación de un estallido aéreo). Úsala como patrón de estructura y de nivel de detalle, no la copies:
 
@@ -199,8 +205,9 @@ Modo PROPUESTAS: devuelve solo JSON válido con la forma `{ "candidates": [ { "t
 3. ¿Cada oración de 1-3 tiene `claimIds`, y cada oración de 4-5 está atada a `whatIf`?
 4. ¿Cifras clave con 2 fuentes tier A/B, o marcadas como BAJA o SIN_VERIFICAR?
 5. ¿Alguna cifra redondeada hacia arriba, superlativo sin fuente o URL que no consultaste?
-6. ¿Hipótesis marcada en el GIRO y en condicional en la CONSECUENCIA?
-7. ¿Cada `visualPrompt` en inglés, en positivo, de una sola toma, con ≤3 eventos, con el ancla de estilo, sin palabras-cliché y con su física respetada? ¿El del GANCHO muestra el evento en su pico (no el después) desde el instante 0 ("At 0 seconds the frame already shows …"), con movimiento rápido, sin plano tranquilo inicial ni revelación, y coincide con lo que dicen las primeras 4 palabras?
-8. ¿`hookText` de 2 a 5 palabras, respaldado por una claim del GANCHO y sin preguntas? ¿`title` sin "¿y si…?" ni "qué pasaría si"?
-9. ¿Tema distinto de `existingStories`?
-10. ¿JSON válido, sin texto extra?
+6. ¿Hipótesis marcada en el GIRO y en condicional en la CONSECUENCIA? ¿La CONSECUENCIA está en escala humana (vida diaria, segunda persona cuando se pueda) y sin víctimas inventadas?
+7. ¿Escenas REAL en presente histórico, frases cortas que escalan y cada escena más tensa que la anterior? ¿Hay un detalle humano real, con claim y fuentes, en la EXPLICACION o el CONTEXTO? ¿El CIERRE deja la amenaza abierta, y si afirma una recurrencia, tiene claim con fuentes?
+8. ¿Cada `visualPrompt` en inglés, en positivo, de una sola toma, con ≤3 eventos y al menos uno visible, con el ancla de estilo, sin palabras-cliché ni de calma, y con su física respetada? ¿Al menos una escena tiene personas anónimas en cuadro? ¿El del GANCHO muestra el evento en su pico (no el después) desde el instante 0 ("At 0 seconds the frame already shows …"), con movimiento rápido, sin plano tranquilo inicial ni revelación, y coincide con lo que dicen las primeras 4 palabras?
+9. ¿`hookText` de 2 a 5 palabras, respaldado por una claim del GANCHO y sin preguntas? ¿`title` sin "¿y si…?" ni "qué pasaría si"?
+10. ¿Tema distinto de `existingStories`?
+11. ¿JSON válido, sin texto extra?

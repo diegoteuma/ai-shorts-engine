@@ -44,6 +44,17 @@ higgsfield:
 elevenlabs:
   api-key: ${ELEVENLABS_API_KEY}
   voice-id: K3TeN3ZVK8WnOeJ0NYqZ
+  # voice_settings de la llamada with-timestamps. Vacío = no se envía (la voz usa sus valores
+  # guardados, como siempre); solo se envían los campos que tengan valor. Defaults de la API
+  # (docs/api-reference/text-to-speech/convert-with-timestamps): stability 0.5,
+  # similarity-boost 0.75, style 0, use-speaker-boost true, speed 1. Ver el README antes de tocar
+  # speed o style: cambian el ritmo y la calibración de 2.65 palabras/s.
+  voice-settings:
+    stability: ${ELEVENLABS_STABILITY:}
+    similarity-boost: ${ELEVENLABS_SIMILARITY_BOOST:}
+    style: ${ELEVENLABS_STYLE:}
+    use-speaker-boost: ${ELEVENLABS_USE_SPEAKER_BOOST:}
+    speed: ${ELEVENLABS_SPEED:}
 
 engine:
   data-dir: ${DATA_DIR:./data/stories}
@@ -158,7 +169,7 @@ app:
       GIRO: { min: 13, max: 17 }
       CONSECUENCIA: { min: 16, max: 20 }
       CIERRE: { min: 8, max: 12 }
-    style-anchor: "Hyperrealistic cinematic documentary footage, vertical 9:16 composition"
+    style-anchor: "Hyperrealistic cinematic disaster documentary footage, vertical 9:16 composition"
     # Palabras completas, sin distinguir mayúsculas. Cualquiera de estas en un visualPrompt es violación dura.
     forbidden-visual-terms: [animated, animation, diagram, illustration, vector, cartoon, infographic,
                              "mushroom cloud", crater, impact, crash, "ground blast"]
@@ -174,6 +185,14 @@ app:
     # Solo advertencia (SOFT), en el title y en la narración de las escenas 1-3: absolutos que
     # necesitan una fuente que lo diga literalmente (sección 6 de las reglas).
     absolute-terms: [jamás, nunca]
+    # Solo advertencia (SOFT), en el visualPrompt de cualquier escena: describe un plano tranquilo
+    # (sección 8.11 de las reglas: ningún rol es sereno ni contemplativo). Misma búsqueda por palabra
+    # completa: "still" también avisa como adverbio ("smoke still rising"); es una heurística.
+    calm-visual-terms: [calm, serene, peaceful, tranquil, quiet, gentle, contemplative, still, idyllic]
+    # Solo advertencia (SOFT), si NINGUNO de los visualPrompt nombra personas (sección 8.8: personas
+    # anónimas para dar escala). Palabra completa: los plurales van como entrada propia.
+    human-scale-terms: [people, person, persons, crowd, crowds, figure, figures, silhouette, silhouettes,
+                        sailor, sailors, residents, man, men, woman, women]
     # Una entrada cubre sus subdominios; si empieza con "." es un sufijo (.edu, .gov).
     tier-a-domains: [nasa.gov, usgs.gov, esa.int, noaa.gov, doi.org, nature.com, science.org, pnas.org,
                      agupubs.onlinelibrary.wiley.com, iopscience.iop.org, aanda.org, sciencedirect.com,

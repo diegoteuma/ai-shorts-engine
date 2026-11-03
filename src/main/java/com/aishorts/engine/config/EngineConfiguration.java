@@ -79,9 +79,15 @@ public class EngineConfiguration {
     @Bean
     TtsConfig ttsConfig(
             @Value("${elevenlabs.api-key}") String apiKey,
-            @Value("${elevenlabs.voice-id}") String voiceId
+            @Value("${elevenlabs.voice-id}") String voiceId,
+            @Value("${elevenlabs.voice-settings.stability:#{null}}") Double stability,
+            @Value("${elevenlabs.voice-settings.similarity-boost:#{null}}") Double similarityBoost,
+            @Value("${elevenlabs.voice-settings.style:#{null}}") Double style,
+            @Value("${elevenlabs.voice-settings.use-speaker-boost:#{null}}") Boolean useSpeakerBoost,
+            @Value("${elevenlabs.voice-settings.speed:#{null}}") Double speed
     ) {
-        return TtsConfig.of(apiKey, voiceId);
+        return TtsConfig.of(apiKey, voiceId)
+                .withVoiceSettings(new TtsConfig.VoiceSettings(stability, similarityBoost, style, useSpeakerBoost, speed));
     }
 
     @Bean

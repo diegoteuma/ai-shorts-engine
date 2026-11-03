@@ -286,7 +286,7 @@ class DraftValidatorTest {
 
     @Test
     void soft_visualPromptWithoutStyleAnchor() {
-        scene(draft, 5).put("visualPrompt", "A calm sunrise over the taiga, one continuous shot.");
+        scene(draft, 5).put("visualPrompt", "A blood-red sunrise over the taiga, one continuous shot.");
         assertOnly(Severity.SOFT, "STYLE_ANCHOR");
         assertThat(codes(validate(), Severity.HARD)).isEmpty();
     }
@@ -400,7 +400,8 @@ class DraftValidatorTest {
         scene(draft, 0).put("visualPrompt", CARRINGTON_HOOK_PROMPT);
         List<Violation> violations = validate();
         assertThat(codes(violations, Severity.HARD)).isEmpty();
-        assertThat(codes(violations, Severity.SOFT)).containsExactly("HOOK_SLOW_REVEAL");
+        // el prompt real de Carrington abre además sobre un mar "calm" y una costa "quiet"
+        assertThat(codes(violations, Severity.SOFT)).containsExactlyInAnyOrder("HOOK_SLOW_REVEAL", "CALM_VISUAL");
         assertThat(violations).extracting(Violation::message)
                 .anyMatch(m -> m.contains("'slowly tilting'"))
                 .anyMatch(m -> m.contains("'tilting upward'"));
@@ -411,7 +412,11 @@ class DraftValidatorTest {
             "slowly reveals", "STARTING ON A CALM"})
     void soft_hookSlowReveal_eachTerm(String term) {
         scene(draft, 0).put("visualPrompt", ANCHOR + ", one continuous shot over the taiga, " + term + " the burst.");
-        assertOnly(Severity.SOFT, "HOOK_SLOW_REVEAL");
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        // "starting on a calm" también es un plano tranquilo (CALM_VISUAL); acá solo importa el reveal
+        assertThat(codes(violations, Severity.SOFT)).filteredOn(code -> !code.equals("CALM_VISUAL"))
+                .as(violations.toString()).containsExactly("HOOK_SLOW_REVEAL");
     }
 
     @Test
@@ -419,7 +424,10 @@ class DraftValidatorTest {
         scene(draft, 0).put("visualPrompt", ANCHOR + ", one continuous shot. From the very first frame, vivid green auroral "
                 + "curtains fill the night sky above a tropical sea, while the camera keeps tilting gently.");
         scene(draft, 2).put("visualPrompt", CARRINGTON_HOOK_PROMPT); // CONTEXTO: la regla es solo del GANCHO
-        assertThat(validate()).isEmpty();
+        List<Violation> violations = validate();
+        // CALM_VISUAL sí aplica a todos los roles: solo avisa en el CONTEXTO ("calm", "quiet")
+        assertThat(codes(violations, Severity.SOFT)).as(violations.toString()).containsExactly("CALM_VISUAL");
+        assertThat(violations).allMatch(v -> "tunguska-x-contexto".equals(v.sceneId()));
     }
 
     // --- SOFT: gancho v2 (hookText, título "¿y si…?", GANCHO con el "después") ------------
@@ -493,7 +501,8 @@ class DraftValidatorTest {
         scene(draft, 0).put("visualPrompt", TUNGUSKA_AFTERMATH_PROMPT);
         List<Violation> violations = validate();
         assertThat(codes(violations, Severity.HARD)).isEmpty();
-        assertThat(codes(violations, Severity.SOFT)).containsExactly("HOOK_AFTERMATH");
+        // "quiet morning mist" también es un plano tranquilo
+        assertThat(codes(violations, Severity.SOFT)).containsExactlyInAnyOrder("HOOK_AFTERMATH", "CALM_VISUAL");
         assertThat(violations).allMatch(v -> "tunguska-x-gancho".equals(v.sceneId()));
         assertThat(violations).extracting(Violation::message)
                 .anyMatch(m -> m.contains("'aftermath'"))
@@ -515,7 +524,76 @@ class DraftValidatorTest {
         scene(draft, 1).put("visualPrompt", TUNGUSKA_AFTERMATH_PROMPT); // EXPLICACION: la regla es solo del GANCHO
         scene(draft, 0).put("narrationText", "Una ruina " + words(10)); // la narración no cuenta, solo el prompt
         draft.put("title", "Ruins del bosque: explosión en la taiga");
+        List<Violation> violations = validate();
+        // solo el CALM_VISUAL del "quiet" en la EXPLICACION, ningún aviso del GANCHO
+        assertThat(codes(violations, Severity.SOFT)).as(violations.toString()).containsExactly("CALM_VISUAL");
+        assertThat(violations).allMatch(v -> "tunguska-x-explicacion".equals(v.sceneId()));
+    }
+
+    // --- SOFT: impacto dramático (plano tranquilo, sin escala humana) -------------------
+
+    /** Así salió el CIERRE del borrador de Krakatoa: una estación de monitoreo con una luz que parpadea. */
+    private static final String KRAKATOA_CALM_CLOSE_PROMPT = ANCHOR + ", one continuous slow push-in on a quiet volcano "
+            + "monitoring station at dusk, a single green light blinking on a console, serene contemplative composition.";
+
+    @Test
+    void soft_calmVisual_krakatoaClose() {
+        scene(draft, 5).put("visualPrompt", KRAKATOA_CALM_CLOSE_PROMPT);
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("CALM_VISUAL");
+        assertThat(violations).allMatch(v -> "tunguska-x-cierre".equals(v.sceneId()));
+        assertThat(violations).extracting(Violation::message)
+                .anyMatch(m -> m.contains("'quiet'"))
+                .anyMatch(m -> m.contains("'serene'"))
+                .anyMatch(m -> m.contains("'contemplative'"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"calm", "Serene", "peaceful", "TRANQUIL", "quiet", "gentle", "contemplative", "still", "idyllic"})
+    void soft_calmVisual_eachTerm_inAnyRole(String term) {
+        scene(draft, 3).put("visualPrompt", ANCHOR + ", one continuous shot of a " + term + " harbor at dusk."); // GIRO
+        assertOnly(Severity.SOFT, "CALM_VISUAL");
+    }
+
+    @Test
+    void calmVisual_matchesWholeWordsOnly() {
+        // "calmly", "stillness", "gentlest" y "quietly" no son las palabras de la lista
+        scene(draft, 4).put("visualPrompt", ANCHOR + ", ash falls calmly, stillness breaks, the gentlest tremor, "
+                + "smoke rises quietly over the harbor.");
         assertThat(validate()).isEmpty();
+    }
+
+    @Test
+    void soft_noHumanScale_whenNoPromptMentionsPeople() {
+        for (int i = 0; i < ROLES.length; i++) {
+            scene(draft, i).put("visualPrompt", ANCHOR + ", one continuous wide shot of an ash column rising over the "
+                    + "harbor at real-time speed, hard light.");
+        }
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("NO_HUMAN_SCALE");
+        assertThat(violations).hasSize(1).allMatch(v -> v.sceneId() == null);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"people", "a person", "a crowd", "a lone figure", "a silhouette", "Silhouettes", "a sailor",
+            "residents", "a man", "a WOMAN"})
+    void humanScaleInOneScene_isEnough(String who) {
+        for (int i = 0; i < ROLES.length; i++) {
+            scene(draft, i).put("visualPrompt", ANCHOR + ", one continuous wide shot of an ash column rising over the harbor.");
+        }
+        scene(draft, 4).put("visualPrompt", ANCHOR + ", " + who + " on the pier, seen from behind, watching the ash column.");
+        assertThat(validate()).isEmpty();
+    }
+
+    @Test
+    void noHumanScale_matchesWholeWordsOnly() {
+        for (int i = 0; i < ROLES.length; i++) {
+            // "manmade", "figurehead" y "personal" no cuentan como personas
+            scene(draft, i).put("visualPrompt", ANCHOR + ", a manmade seawall, a ship figurehead, personal radios.");
+        }
+        assertOnly(Severity.SOFT, "NO_HUMAN_SCALE");
     }
 
     @Test

@@ -172,13 +172,13 @@ class StoryDraftDecisionApiTest extends DraftApiTestSupport {
 
         ResponseEntity<Map> response = decide(Map.of("decision", "APPROVE",
                 "narrationEdits", List.of(Map.of("sceneId", ID + "-gancho", "narrationText", fixedHook)),
-                "promptEdits", List.of(Map.of("sceneId", ID + "-cierre", "visualPrompt", ANCHOR + ", a quiet observatory at night."))));
+                "promptEdits", List.of(Map.of("sceneId", ID + "-cierre", "visualPrompt", ANCHOR + ", an observatory at night under a blood-red sky."))));
 
         assertThat(response.getStatusCode().value()).as(String.valueOf(response.getBody())).isEqualTo(200);
         Map<String, Object> story = (Map<String, Object>) response.getBody().get("story");
         List<Map<String, Object>> scenes = (List<Map<String, Object>>) story.get("scenes");
         assertThat(scenes.get(0).get("narrationText")).isEqualTo(fixedHook);
-        assertThat(scenes.get(5).get("visualPrompt")).isEqualTo(ANCHOR + ", a quiet observatory at night.");
+        assertThat(scenes.get(5).get("visualPrompt")).isEqualTo(ANCHOR + ", an observatory at night under a blood-red sky.");
         Map<String, Object> draft = (Map<String, Object>) response.getBody().get("draft");
         assertThat(((List<Map<String, Object>>) draft.get("scenes")).get(0).get("words")).isEqualTo(14);
         assertThat((List<?>) draft.get("violations")).isEmpty();

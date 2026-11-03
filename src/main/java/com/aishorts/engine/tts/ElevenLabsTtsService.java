@@ -11,6 +11,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,11 +41,15 @@ public final class ElevenLabsTtsService implements TtsService {
             throw new TtsException("narrationText no puede estar vacío.");
         }
 
-        Map<String, Object> body = Map.of(
-                "text", narrationText,
-                "model_id", config.modelId(),
-                "output_format", config.outputFormat()
-        );
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("text", narrationText);
+        body.put("model_id", config.modelId());
+        body.put("output_format", config.outputFormat());
+        Map<String, Object> voiceSettings = config.voiceSettings() != null
+                ? config.voiceSettings().toRequestFields() : Map.of();
+        if (!voiceSettings.isEmpty()) {
+            body.put("voice_settings", voiceSettings);
+        }
 
         try {
             HttpRequest request = HttpRequest.newBuilder(
