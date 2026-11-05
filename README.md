@@ -180,8 +180,9 @@ POST /story-drafts/proposals        {focus?}  -> 5 temas candidatos (no guarda n
 POST /story-drafts                  {topic, rejectedDraftId?}  -> borrador PENDING_REVIEW en data/drafts/<id>.json
 GET  /story-drafts                  resumen (id, título, tema, status, # violaciones duras/blandas)
 GET  /story-drafts/{id}             borrador completo (claims, fuentes, what-if, violaciones, researchedUrls, usage)
-PATCH /story-drafts/{id}            {title?, hookText?, narrationEdits?, promptEdits?} -> edita a mano un PENDING_REVIEW, recalcula y revalida (sin Claude)
-POST /story-drafts/{id}/decision    PUERTA 0: {decision: APPROVE|REJECT, note?, hookText?, narrationEdits?, promptEdits?, acknowledgeUnverified?}
+PATCH /story-drafts/{id}            {title?, hookText?, narrationEdits?, promptEdits?, locationEdits?} -> edita a mano un PENDING_REVIEW, recalcula y revalida (sin Claude)
+POST /story-drafts/{id}/decision    PUERTA 0: {decision: APPROVE|REJECT, note?, hookText?, narrationEdits?, promptEdits?, locationEdits?, acknowledgeUnverified?}
+                                    locationEdits: [{sceneId, locationLabel}]; "" quita el rótulo
          │
          └─ APPROVE -> Story nueva en data/stories (= POST /stories) -> POST /stories/{id}/tiers -> ...
 ```
@@ -228,7 +229,16 @@ POST /story-drafts/{id}/decision    PUERTA 0: {decision: APPROVE|REJECT, note?, 
   dominio sin tier, slug renombrado, `CALM_VISUAL` (un `visualPrompt` con
   `calm`, `serene`, `quiet`… de `app.drafts.calm-visual-terms`) y
   `NO_HUMAN_SCALE` (ningún `visualPrompt` nombra personas de
-  `app.drafts.human-scale-terms`). El tono de las reglas es de documental de
+  `app.drafts.human-scale-terms`), `TOO_MANY_EVENTS` (un `visualPrompt` con
+  más de 2 frases que empiezan con "A fraction of a second later", "A moment
+  later" o "Then": lista cerrada, en `DraftValidator`), `LOCATION_LABEL_LENGTH`
+  (`locationLabel` de más de 25 caracteres) y `LOCATION_LABEL_NOT_REAL`
+  (rótulo fuera de las escenas 1-3). El GANCHO va de **8 a 11 palabras**
+  (`scene-word-ranges`; antes 10-14). **`locationLabel`** (opcional, por
+  escena): rótulo de lugar y fecha que el video final muestra chico y fijo
+  durante toda la escena; el generador lo propone para las escenas REAL que
+  nombran un lugar, pasa a la `Story` al aprobar y las historias anteriores se
+  leen sin él. El tono de las reglas es de documental de
   catástrofe, tenso y urgente, con las mismas exigencias de claims y fuentes.
 - **Nunca se sobrescribe** un borrador ni una historia: si el slug choca, el
   servidor lo renombra (`slug-2`, con los ids de escena re-prefijados) y lo
@@ -537,11 +547,43 @@ POST   /stories/{id}/prompt-decisions   applyPromptDecisions   (PUERTA 1)
 POST   /stories/{id}/narration          synthesizeNarrationForApprovedScenes (+ durationWarnings)
 POST   /stories/{id}/cost-estimates     estimateCostsForApprovedScenes       (+ durationWarnings)
 POST   /stories/{id}/cost-decisions     applyCostDecisions     (PUERTA 2)
-POST   /stories/{id}/generate           generateApprovedScenes
+POST   /stories/{id}/generate           generateApprovedScenes (sin body: todas; {"sceneIds": [...]}: solo esas)
 POST   /stories/{id}/poll-generation    pollGenerationStatus
 POST   /stories/{id}/reset-generation   resetAllScenesForRegeneration / resetScenesForRegeneration
 POST   /stories/{id}/clip-offsets       {"<sceneId>": segundos} -> desde qué segundo del clip local se muestra cada escena
+POST   /stories/{id}/scenes/{sceneId}/frames   3 JPG del clip local (clipStartOffset, +1 s, +2 s) para revisarlo
 ```
+
+**Compuerta del GANCHO (generar y revisar primero).** El GANCHO es ~15 % del
+costo de generación pero decide si se queda la audiencia; un clip que no
+muestra el evento desde el arranque no se detecta en ningún otro paso. Flujo
+recomendado, después de aprobar los costos de las 6 escenas en la PUERTA 2:
+
+1. `POST /stories/{id}/generate` con `{"sceneIds": ["<id>-gancho"]}`: solo se
+   envía el GANCHO a Higgsfield. Las otras 5 quedan `NOT_STARTED` con su costo
+   aprobado. Sin body, `generate` hace lo de siempre (todas las aprobadas).
+   Una escena inexistente o no lista (costo sin aprobar, ya generada) va a
+   `failedSceneIds` con el motivo y no frena a las demás; `[]` es 400.
+2. `POST /stories/{id}/poll-generation` hasta que el GANCHO quede `COMPLETED`.
+3. Revisar el clip **a mano** con su `generatedAssetUrl`. El clip local no
+   existe todavía: `ClipStore` solo descarga cuando las 6 escenas están
+   `COMPLETED` (comportamiento sin cambios).
+4. Si no sirve: `POST /stories/{id}/reset-generation` con `["<id>-gancho"]`.
+   El reset descarta el costo, así que hay que volver a pasar por
+   `cost-estimates` y `cost-decisions` (solo esa escena) antes de repetir el paso 1.
+5. Si sirve: `POST /stories/{id}/generate` sin body genera las 5 restantes
+   (el GANCHO ya generado no se reenvía) y se sigue con `poll-generation`.
+6. Con los clips locales ya guardados, `POST /stories/{id}/scenes/{sceneId}/frames`
+   extrae con FFmpeg 3 JPG en `clipStartOffset`, `+1 s` y `+2 s` (acotados a la
+   duración real del clip menos 0,05 s: FFmpeg no escribe nada si se le pide
+   el último instante). Sirve para elegir el corte (`clip-offsets`) sin abrir
+   el video. Solo lee el clip; los JPG van a `FRAMES_DIR/<idHistoria>/`
+   (`./data/frames`, fuera de git) y se pisan en cada llamada. 404 escena
+   desconocida, 409 sin clip local, 422 clip ilegible (sin duración) o
+   FFmpeg falla. `FFMPEG_COMMAND` (default `ffmpeg`), `FRAMES_TIMEOUT_SECONDS` (30).
+
+No hay chequeo automático con un modelo de visión: queda para otro
+incremento, después de calibrarlo contra revisiones humanas.
 
 **Gancho: texto en pantalla y margen de arranque.** El borrador trae
 `hookText` (2-5 palabras con la anomalía o la cifra central; aviso SOFT si
@@ -563,11 +605,20 @@ estos campos se leen con `hookText` null y `clipStartOffset` 0.
 palabras; la duración real recién existe cuando `/narration` sintetiza el
 audio. Por eso `/narration` y `/cost-estimates` agregan a la respuesta
 (`succeededSceneIds`, `failedSceneIds`, `story`, sin cambios) un campo
-`durationWarnings`: lista de `{sceneId, actualSeconds, limitSeconds, kind}`
-con `kind` = `SCENE_TOO_LONG`, `SCENE_TOO_SHORT`, `TOTAL_TOO_LONG` o
-`TOTAL_TOO_SHORT` (`sceneId` es null en los del total). Límites inclusivos
+`durationWarnings`: lista de `{sceneId, actualSeconds, limitSeconds, kind,
+words, wordsPerSecond}` con `kind` = `SCENE_TOO_LONG` (> 8 s),
+`SCENE_TOO_SHORT` (< 3 s; **el GANCHO, < 3,5 s**, `DURATION_MIN_HOOK_SECONDS`),
+`NARRATION_TOO_FAST` (más de **3,1 palabras/s**, `DURATION_MAX_WORDS_PER_SECOND`;
+las palabras se cuentan con `DraftText.countWords`, la misma función del
+validador del borrador; acá `limitSeconds` es lo mínimo que debería durar ese
+texto a 3,1 palabras/s), `TOTAL_TOO_LONG` o `TOTAL_TOO_SHORT` (total fuera de
+35-40 s; `sceneId`, `words` y `wordsPerSecond` son null en los del total).
+`GET /stories/{id}` trae el mismo campo, calculado en cada lectura (no se
+guarda en el JSON de la historia). Límites inclusivos
 (8,000 s no avisa; 8,001 s sí). Solo cuentan las escenas con audio; el total
-se evalúa solo cuando todas lo tienen. **No bloquea nada**: es para verlo
+se evalúa solo cuando todas lo tienen. Ejemplo real: el GANCHO de
+`valdivia-1960` (2,97 s, 12 palabras, 4,04 palabras/s) da `SCENE_TOO_SHORT` y
+`NARRATION_TOO_FAST`. **No bloquea nada**: es para verlo
 antes de la PUERTA 2. Para acortar, reaprobar el prompt en la PUERTA 1 con
 `revisedNarrationText` y volver a llamar a `/narration` y `/cost-estimates`.
 Cambiar el texto de la narración descarta el audio **y el costo** (estimado

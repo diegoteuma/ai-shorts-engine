@@ -78,6 +78,13 @@ public final class StoryDraft {
         public Integer order;
         public String narrationText;
         public String visualPrompt;
+        /**
+         * Rótulo de lugar y fecha en pantalla (p. ej. "JAPÓN · MAYO 1960",
+         * ~25 caracteres como máximo), fijo durante toda la escena. Opcional
+         * (null = sin rótulo); lo propone el generador para escenas REAL
+         * cuya narración nombra un lugar, respaldado por sus claimIds.
+         */
+        public String locationLabel;
         public List<String> visualConstraints = new ArrayList<>();
         public List<String> claimIds = new ArrayList<>();
         public int words;

@@ -99,7 +99,7 @@ class StoryDraftGenerationApiTest extends DraftApiTestSupport {
 
         // words/checks del modelo (99 y totalWords 1) ignorados y recalculados
         List<Map<String, Object>> scenes = (List<Map<String, Object>>) body.get("scenes");
-        assertThat(scenes).extracting(s -> s.get("words")).containsExactly(12, 19, 18, 15, 18, 12);
+        assertThat(scenes).extracting(s -> s.get("words")).containsExactly(10, 19, 19, 16, 18, 12);
         Map<String, Object> checks = (Map<String, Object>) body.get("checks");
         assertThat(checks.get("totalWords")).isEqualTo(94);
         assertThat(checks.get("sourcesVerified")).isEqualTo(true);

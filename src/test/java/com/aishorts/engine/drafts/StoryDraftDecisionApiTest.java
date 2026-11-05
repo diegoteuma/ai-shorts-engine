@@ -61,6 +61,8 @@ class StoryDraftDecisionApiTest extends DraftApiTestSupport {
         assertThat(approvedStory.get("hookText")).isEqualTo(HOOK_TEXT);
         Map<String, Object> withoutHookText = new java.util.LinkedHashMap<>(approvedStory);
         withoutHookText.put("hookText", null);
+        // GET /stories/{id} agrega durationWarnings (calculado, no guardado); POST /stories no.
+        withoutHookText.remove("durationWarnings");
         assertThat(viaPostStories.getBody()).isEqualTo(withoutHookText);
     }
 
@@ -168,7 +170,7 @@ class StoryDraftDecisionApiTest extends DraftApiTestSupport {
         Map<String, Object> bad = validDraft(ID, "Estallido de Tunguska");
         scene(bad, 0).put("narrationText", words(22)); // SCENE_DURATION en el GANCHO
         generate(bad, RESEARCHED);
-        String fixedHook = "Un estallido en el cielo tumbó millones de árboles en Siberia, sin dejar cráter.";
+        String fixedHook = "Un estallido en el cielo tumbó millones de árboles sin cráter.";
 
         ResponseEntity<Map> response = decide(Map.of("decision", "APPROVE",
                 "narrationEdits", List.of(Map.of("sceneId", ID + "-gancho", "narrationText", fixedHook)),
@@ -180,7 +182,7 @@ class StoryDraftDecisionApiTest extends DraftApiTestSupport {
         assertThat(scenes.get(0).get("narrationText")).isEqualTo(fixedHook);
         assertThat(scenes.get(5).get("visualPrompt")).isEqualTo(ANCHOR + ", an observatory at night under a blood-red sky.");
         Map<String, Object> draft = (Map<String, Object>) response.getBody().get("draft");
-        assertThat(((List<Map<String, Object>>) draft.get("scenes")).get(0).get("words")).isEqualTo(14);
+        assertThat(((List<Map<String, Object>>) draft.get("scenes")).get(0).get("words")).isEqualTo(11);
         assertThat((List<?>) draft.get("violations")).isEmpty();
     }
 

@@ -62,6 +62,13 @@ engine:
   # Copia local de los clips de Higgsfield (se guardan cuando poll-generation deja
   # TODAS las escenas COMPLETED). El directorio se crea al descargar el primer clip.
   clips-dir: ${CLIPS_DIR:./data/clips}
+  # Fotogramas de revisión (POST /stories/{id}/scenes/{sceneId}/frames): 3 JPG por llamada en
+  # FRAMES_DIR/<idHistoria>/<idEscena>-<ms>ms.jpg, que se pisan en cada llamada. Debe quedar fuera
+  # de git (./data está en .gitignore). ffmpeg-command: el ejecutable (sin argumentos).
+  frames:
+    dir: ${FRAMES_DIR:./data/frames}
+    ffmpeg-command: ${FFMPEG_COMMAND:ffmpeg}
+    timeout-seconds: ${FRAMES_TIMEOUT_SECONDS:30}
   # Margen de arranque del GANCHO, en segundos: a Higgsfield se le pide
   # ceil(targetDuration + lead-seconds) solo para esa escena (respetando la DurationPolicy del
   # modelo) y el clip se muestra desde ese segundo (Scene.clipStartOffset, ajustable con
@@ -70,14 +77,19 @@ engine:
   # ~0,42 USD; tarifa SIN VERIFICAR, ver KnownHiggsfieldPricing). 0 = sin margen.
   hook:
     lead-seconds: ${HOOK_LEAD_SECONDS:3}
-  # Avisos de duración REAL (la del audio de TTS) en la respuesta de POST /stories/{id}/narration
-  # y /cost-estimates (campo durationWarnings). Solo avisan, no bloquean nada. Defaults: los de
-  # las reglas del generador (escena 3-8 s, total 35-40 s). Límites inclusivos, en segundos.
+  # Avisos de duración REAL (la del audio de TTS) en la respuesta de POST /stories/{id}/narration,
+  # /cost-estimates y GET /stories/{id} (campo durationWarnings). Solo avisan, no bloquean nada.
+  # Defaults: los de las reglas del generador (escena 3-8 s, total 35-40 s). Límites inclusivos, en
+  # segundos. min-hook-seconds: mínimo propio del GANCHO (valdivia-1960: 2,97 s y la ola no llegó a
+  # verse). max-words-per-second: palabras de la narración (contadas como el validador del borrador)
+  # sobre la duración real; la calibración es 2,65 y valdivia-1960 dio 4,04 en el GANCHO.
   duration-warnings:
     min-scene-seconds: ${DURATION_MIN_SCENE_SECONDS:3}
     max-scene-seconds: ${DURATION_MAX_SCENE_SECONDS:8}
     min-total-seconds: ${DURATION_MIN_TOTAL_SECONDS:35}
     max-total-seconds: ${DURATION_MAX_TOTAL_SECONDS:40}
+    min-hook-seconds: ${DURATION_MIN_HOOK_SECONDS:3.5}
+    max-words-per-second: ${DURATION_MAX_WORDS_PER_SECOND:3.1}
   # Video final (POST /stories/{id}/final-video): lanza node video-renderer/src/make-video.mjs
   # (transcripción + composición + render con HyperFrames 0.8.143), un render a la vez.
   # DESHABILITADO por defecto: la API no tiene autenticación y esto lanza procesos
@@ -192,7 +204,7 @@ app:
     max-scene-seconds: 8
     # Rangos sugeridos por escena (tabla de la sección 4 de las reglas): solo advertencia.
     scene-word-ranges:
-      GANCHO: { min: 10, max: 14 }
+      GANCHO: { min: 8, max: 11 }
       EXPLICACION: { min: 17, max: 21 }
       CONTEXTO: { min: 16, max: 20 }
       GIRO: { min: 13, max: 17 }

@@ -4,12 +4,16 @@ import com.aishorts.engine.approval.BatchResult;
 import com.aishorts.engine.approval.CostDecision;
 import com.aishorts.engine.approval.PromptDecision;
 import com.aishorts.engine.approval.StoryApprovalService;
+import com.aishorts.engine.clips.ClipException;
+import com.aishorts.engine.clips.ClipFrameExtractor;
 import com.aishorts.engine.clips.ClipStore;
 import com.aishorts.engine.clips.ClipSyncResult;
 import com.aishorts.engine.clips.Mp4Probe;
 import com.aishorts.engine.difficulty.DifficultyFactors;
 import com.aishorts.engine.domain.Scene;
+import com.aishorts.engine.domain.SceneRole;
 import com.aishorts.engine.domain.Story;
+import com.aishorts.engine.drafts.DraftText;
 import com.aishorts.engine.domain.StoryIds;
 import com.aishorts.engine.duration.ActualDurationChecker;
 import com.aishorts.engine.drafts.StoryIndex;
@@ -60,7 +64,8 @@ import java.util.UUID;
  *                                          + "durationWarnings": duración real fuera de las reglas (solo aviso)
  * POST   /stories/{id}/cost-estimates     estimateCostsForApprovedScenes (+ "durationWarnings")
  * POST   /stories/{id}/cost-decisions     applyCostDecisions     (PUERTA 2)
- * POST   /stories/{id}/generate           generateApprovedScenes
+ * POST   /stories/{id}/generate           generateApprovedScenes (body omitido -> todas las escenas con costo aprobado;
+ *                                          { "sceneIds": [...] } -> solo esas, p. ej. el GANCHO primero; [] -> 400)
  * POST   /stories/{id}/poll-generation    pollGenerationStatus  (llamar seguido hasta que termine)
  *                                          Cuando TODAS las escenas quedan COMPLETED, además guarda los clips
  *                                          en engine.clips-dir (campo "clips" de la respuesta). Una descarga
@@ -71,6 +76,10 @@ import java.util.UUID;
  * POST   /stories/{id}/clip-offsets       { "&lt;sceneId&gt;": segundos }: desde qué segundo del clip local se muestra
  *                                          cada escena (todo o nada). 0 &lt;= offset y offset + targetDuration
  *                                          &lt;= duración del clip (Mp4Probe); 409 si su video final está en curso.
+ * POST   /stories/{id}/scenes/{sceneId}/frames
+ *                                          3 JPG del clip local (FFmpeg) en clipStartOffset, +1 s y +2 s, acotados a
+ *                                          la duración del clip. Solo lee el clip; los JPG van a engine.frames.dir.
+ *                                          404 escena desconocida; 409 sin clip local; 422 clip ilegible o FFmpeg falla.
  * </pre>
  */
 @RestController
@@ -84,6 +93,7 @@ public class StoryController {
     private final StoryIndex storyIndex;
     private final ClipStore clipStore;
     private final ActualDurationChecker durationChecker;
+    private final ClipFrameExtractor frameExtractor;
     /** Solo existe con engine.final-video.enabled=true; sin él no puede haber un render en curso. */
     private final ObjectProvider<FinalVideoService> finalVideoService;
 
@@ -95,8 +105,10 @@ public class StoryController {
             StoryIndex storyIndex,
             ClipStore clipStore,
             ActualDurationChecker durationChecker,
+            ClipFrameExtractor frameExtractor,
             ObjectProvider<FinalVideoService> finalVideoService
     ) {
+        this.frameExtractor = frameExtractor;
         this.finalVideoService = finalVideoService;
         this.approvalService = approvalService;
         this.draftingService = draftingService;
@@ -131,9 +143,16 @@ public class StoryController {
         return ResponseEntity.status(HttpStatus.CREATED).body(SnapshotMapper.toMap(story.toSnapshot()));
     }
 
+    /**
+     * El estado guardado más "durationWarnings", calculado en cada lectura
+     * (no se persiste: así nunca queda desactualizado respecto del audio).
+     */
     @GetMapping("/{id}")
     public Map<String, Object> getStory(@PathVariable("id") String id) {
-        return SnapshotMapper.toMap(loadOrNotFound(id).toSnapshot());
+        Story story = loadOrNotFound(id);
+        Map<String, Object> response = SnapshotMapper.toMap(story.toSnapshot());
+        response.put("durationWarnings", durationWarnings(story));
+        return response;
     }
 
     @PostMapping("/{id}/tiers")
@@ -184,9 +203,12 @@ public class StoryController {
     }
 
     @PostMapping("/{id}/generate")
-    public Map<String, Object> generate(@PathVariable("id") String id) {
+    public Map<String, Object> generate(@PathVariable("id") String id, @RequestBody(required = false) Map<String, Object> body) {
         Story story = loadOrNotFound(id);
-        BatchResult result = approvalService.generateApprovedScenes(story);
+        List<String> sceneIds = RequestParsing.parseOptionalSceneIds(body);
+        BatchResult result = (sceneIds == null)
+                ? approvalService.generateApprovedScenes(story)
+                : approvalService.generateApprovedScenes(story, sceneIds);
         repository.save(story);
         return batchResponse(result, story);
     }
@@ -254,6 +276,60 @@ public class StoryController {
         return response;
     }
 
+    /**
+     * Fotogramas para revisar un clip sin abrir el video (la compuerta del
+     * GANCHO). Exige el clip local: ClipStore lo guarda cuando TODAS las
+     * escenas están COMPLETED (antes de eso, se revisa con generatedAssetUrl).
+     */
+    @PostMapping("/{id}/scenes/{sceneId}/frames")
+    public Map<String, Object> sceneFrames(@PathVariable("id") String id, @PathVariable("sceneId") String sceneId) {
+        Story story = loadOrNotFound(id);
+        Scene scene = story.scenes().stream().filter(s -> s.id().equals(sceneId)).findFirst()
+                .orElseThrow(() -> new ApiError(404, "La historia '" + story.id() + "' no tiene la escena '" + sceneId + "'."));
+        if (!scene.hasLocalClip()) {
+            throw new ApiError(409, "La escena '" + sceneId + "' no tiene clip local (poll-generation lo guarda cuando "
+                    + "TODAS las escenas están COMPLETED; mientras tanto se revisa con generatedAssetUrl).");
+        }
+        Path clip;
+        try {
+            clip = clipStore.resolve(scene.localClipPath());
+        } catch (RuntimeException e) {
+            throw new ApiError(422, "Ruta de clip inválida en '" + sceneId + "': " + e.getMessage());
+        }
+        if (!java.nio.file.Files.isRegularFile(clip)) {
+            throw new ApiError(409, "La escena '" + sceneId + "' registra el clip local '" + scene.localClipPath()
+                    + "' pero el archivo no existe en " + clipStore.clipsDir() + ".");
+        }
+        Double clipSeconds;
+        try {
+            clipSeconds = Mp4Probe.probe(clip).durationSeconds();
+        } catch (RuntimeException e) {
+            throw new ApiError(422, "No se pudo leer el clip de '" + sceneId + "': " + e.getMessage());
+        }
+        if (clipSeconds == null) {
+            throw new ApiError(422, "El clip de '" + sceneId + "' no declara su duración (sin caja 'mdhd').");
+        }
+        List<ClipFrameExtractor.Frame> frames;
+        try {
+            frames = frameExtractor.extract(story.id(), sceneId, clip, scene.clipStartOffset(), clipSeconds);
+        } catch (ClipException e) {
+            throw new ApiError(422, e.getMessage());
+        }
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("sceneId", sceneId);
+        response.put("clipStartOffset", scene.clipStartOffset());
+        response.put("clipDurationSeconds", clipSeconds);
+        response.put("frames", frames.stream().map(f -> {
+            Map<String, Object> frame = new LinkedHashMap<>();
+            frame.put("requestedSeconds", f.requestedSeconds());
+            frame.put("seconds", f.seconds());
+            frame.put("clamped", f.clamped());
+            frame.put("path", f.path().toAbsolutePath().normalize().toString());
+            return frame;
+        }).toList());
+        return response;
+    }
+
     /** Margen de redondeo al comparar segundos (offset + duración vs. duración del clip). */
     private static final double CLIP_FIT_EPSILON_SECONDS = 1e-6;
 
@@ -290,8 +366,10 @@ public class StoryController {
      * la estimación por palabras, no la duración real.
      */
     private List<ActualDurationChecker.Warning> durationWarnings(Story story) {
+        // Las palabras se cuentan con la misma función que el validador del borrador (DraftText.countWords).
         List<ActualDurationChecker.SceneDuration> durations = story.scenes().stream()
-                .map(s -> new ActualDurationChecker.SceneDuration(s.id(), s.hasNarrationAudio() ? s.targetDuration() : null))
+                .map(s -> new ActualDurationChecker.SceneDuration(s.id(), s.hasNarrationAudio() ? s.targetDuration() : null,
+                        s.role() == SceneRole.GANCHO, DraftText.countWords(s.narrationText())))
                 .toList();
         return durationChecker.check(durations);
     }

@@ -103,6 +103,35 @@ final class RequestParsing {
         }
     }
 
+    /**
+     * Body opcional de POST /stories/{id}/generate: null (sin body o sin
+     * campos) = todas las escenas aprobadas; { "sceneIds": [...] } = solo
+     * esas. Una lista vacía llega como lista vacía (el servicio la rechaza
+     * con 400, igual que reset-generation). Otro campo, o sceneIds que no es
+     * una lista de textos, es 400.
+     */
+    static List<String> parseOptionalSceneIds(Map<String, Object> body) {
+        if (body == null || body.isEmpty()) {
+            return null;
+        }
+        for (String key : body.keySet()) {
+            if (!"sceneIds".equals(key)) {
+                throw new ApiError(400, "Campo desconocido '" + key + "': el body de generate solo admite { \"sceneIds\": [...] }.");
+            }
+        }
+        if (!(body.get("sceneIds") instanceof List<?> list)) {
+            throw new ApiError(400, "'sceneIds' debe ser un array de ids de escena.");
+        }
+        List<String> ids = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof String text) || text.isBlank()) {
+                throw new ApiError(400, "'sceneIds' debe contener solo ids de escena (texto no vacío), llegó: " + item);
+            }
+            ids.add(text);
+        }
+        return ids;
+    }
+
     // --- helpers --------------------------------------------------------------------------
 
     private static Decision parseDecision(String text) {

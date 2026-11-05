@@ -91,6 +91,21 @@ class StoryDurationWarningsApiTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void getStory_includesTheSameWarnings_computedOnRead_andTheyAreNotPersisted() throws Exception {
+        List<String> sceneIds = createStoryWithApprovedPrompts("dur-get");
+        post("/stories/dur-get/narration", null, 200);
+
+        ResponseEntity<Map> got = restTemplate.getForEntity("http://localhost:" + port + "/stories/dur-get", Map.class);
+
+        assertThat(got.getStatusCode().value()).isEqualTo(200);
+        assertCarringtonWarnings((Map<String, Object>) got.getBody(), sceneIds);
+        // El archivo guardado no los trae: se calculan en cada lectura.
+        assertThat(java.nio.file.Files.readString(dataDir.resolve("stories").resolve("dur-get.json")))
+                .doesNotContain("durationWarnings");
+    }
+
+    @Test
     void costEstimatesWithoutNarration_doesNotWarnAboutTheWordCountEstimates() {
         // FakeScriptDraftingService: el GANCHO estimado por palabras dura ~2.3 s (< 3), pero no es duración real.
         createStoryWithApprovedPrompts("dur-no-audio");

@@ -97,6 +97,64 @@ export function renderHookText(hookText, { end }) {
   return { css, html, js };
 }
 
+/**
+ * Rótulo de lugar y fecha por escena (backend: Scene.locationLabel), chico y fijo durante toda la escena.
+ *
+ * Posición: franja de arriba, por ENCIMA del texto del gancho (#hook-text empieza en top 11 %) y lejos de los
+ * subtítulos (bottom 14 %): top 4.5 %, una sola línea de ~0.036 x ancho (26 px a 720) con 6+5 px de relleno, así que
+ * termina en ~95 px de 1280 y el gancho empieza en ~141 px. Una línea siempre: el JS achica la letra si no entra.
+ *
+ * Visible desde el primer fotograma de su escena: la de una escena que empieza en 0 no se oculta nunca al inicio
+ * (como el gancho); las demás arrancan ocultas por CSS y un tl.set las muestra en su inicio (como los subtítulos).
+ * Todas se ocultan en el fin de su escena. Sin animación ni azar. El texto va escapado en el HTML y nunca dentro
+ * del <script>. Sin ninguna escena con rótulo devuelve cadenas vacías: la composición queda idéntica.
+ */
+export function renderLocationLabels(scenes) {
+  const labelled = scenes.filter((s) => s.locationLabel);
+  if (labelled.length === 0) return { css: "", html: "", js: "" };
+  const css = `
+      .location-label {
+        position: absolute;
+        top: 4.5%;
+        left: 6%;
+        width: 88%;
+        z-index: 12;
+        display: flex;
+        justify-content: center;
+        pointer-events: none;
+      }
+      .location-label-box {
+        font-family: "Montserrat", sans-serif;
+        font-weight: 800;
+        text-transform: uppercase;
+        white-space: nowrap;
+        color: #ffffff;
+        background: rgba(0, 0, 0, 0.55);
+        border-radius: 6px;
+        padding: 6px 12px 5px;
+        line-height: 1;
+        letter-spacing: 0.08em;
+        text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+      }
+`;
+  let html = "";
+  let js = `\n  // Rótulos de lugar: uno por escena con locationLabel, visible de principio a fin de su escena.\n`;
+  for (const s of labelled) {
+    const end = round6(s.start + s.duration);
+    const hiddenAtStart = s.start > 0 ? ` style="visibility: hidden"` : "";
+    html += `      <div class="location-label" id="loc-${s.id}"${hiddenAtStart}><div class="location-label-box">${escapeHtml(s.locationLabel)}</div></div>\n`;
+    js +=
+      `  (function(){\n` +
+      `    var wrap = document.getElementById("loc-${s.id}");\n` +
+      `    var box = wrap.firstChild;\n` +
+      `    box.style.fontSize = fitFontSize(box.textContent.toUpperCase(), Math.round(CANVAS_W * 0.036), "800", "Montserrat", Math.round(CANVAS_W * 0.72)) + "px";\n` +
+      (s.start > 0 ? `    tl.set(wrap, { visibility: "visible" }, ${s.start.toFixed(6)});\n` : "") +
+      `    tl.set(wrap, { visibility: "hidden" }, ${end.toFixed(6)});\n` +
+      `  })();\n`;
+  }
+  return { css, html, js };
+}
+
 /** Sustituye {{CLAVE}} en una sola pasada (los valores no se vuelven a escanear). Falla si falta una clave. */
 export function fillTemplate(template, values) {
   const used = new Set();
@@ -223,6 +281,7 @@ export function buildComposition({ story, transcriptsByScene, template, options 
     warnings.push(`La historia tiene hookText pero ninguna escena GANCHO: se muestra durante la primera escena (${hookScene.id}).`);
   }
   const hook = renderHookText(hookText, { end: hookScene ? round6(hookScene.start + hookScene.duration) : 0 });
+  const location = renderLocationLabels(scenes);
 
   const html = fillTemplate(template, {
     TITLE: escapeHtml(o.title),
@@ -236,6 +295,9 @@ export function buildComposition({ story, transcriptsByScene, template, options 
     HOOK_CSS: hook.css,
     HOOK_HTML: hook.html,
     HOOK_JS: hook.js,
+    LOCATION_CSS: location.css,
+    LOCATION_HTML: location.html,
+    LOCATION_JS: location.js,
   });
 
   return {

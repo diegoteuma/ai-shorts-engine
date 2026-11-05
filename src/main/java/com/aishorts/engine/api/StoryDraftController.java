@@ -41,7 +41,7 @@ import java.util.Set;
  * POST   /story-drafts                  generar un borrador (queda PENDING_REVIEW)
  * GET    /story-drafts                  resumen de todos los borradores
  * GET    /story-drafts/{id}             borrador completo
- * PATCH  /story-drafts/{id}             editar título / hookText / narración / prompts (sigue PENDING_REVIEW)
+ * PATCH  /story-drafts/{id}             editar título / hookText / narración / prompts / locationLabel (sigue PENDING_REVIEW)
  * POST   /story-drafts/{id}/decision    APPROVE | REJECT          (PUERTA 0)
  * </pre>
  */
@@ -116,7 +116,8 @@ public class StoryDraftController {
                 optionalString(fields, "title"),
                 optionalString(fields, "hookText"),
                 parseEdits(fields, "narrationEdits", "narrationText"),
-                parseEdits(fields, "promptEdits", "visualPrompt")
+                parseEdits(fields, "promptEdits", "visualPrompt"),
+                parseEdits(fields, "locationEdits", "locationLabel")
         );
         StoryDraft edited = draftService.edit(draft, edit, existingStories());
         draftRepository.update(edited);
@@ -200,7 +201,8 @@ public class StoryDraftController {
                 parseEdits(body, "narrationEdits", "narrationText"),
                 parseEdits(body, "promptEdits", "visualPrompt"),
                 Boolean.TRUE.equals(ack),
-                optionalString(body, "hookText")
+                optionalString(body, "hookText"),
+                parseEdits(body, "locationEdits", "locationLabel")
         );
     }
 

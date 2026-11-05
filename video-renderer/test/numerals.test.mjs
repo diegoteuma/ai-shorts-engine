@@ -181,3 +181,59 @@ test("si ni A ni B son confiables, se informa el error de alineación (no se adi
   const asr = asrFrom(["nada", "que", "ver"]);
   assert.throws(() => alignSceneWithNumerals(scene(NARR), asr, "auto"), /alineación no confiable/);
 });
+
+// ---- decimales ("nueve coma cinco" -> "9,5"), incremento "gancho fiable" ----
+test("decimales: 'X coma Y' sale con coma decimal, aunque valga menos de 10 (valdivia-1960)", () => {
+  assert.equal(run("Magnitud nueve coma cinco.").text, "Magnitud 9,5.");
+  assert.equal(run("tres coma catorce").text, "3,14");
+  assert.equal(run("veintidós coma cinco grados").text, "22,5 grados");
+  assert.equal(run("cero coma cero cinco segundos").text, "0,05 segundos");
+  assert.equal(run("uno coma cinco millones").text, "1,5 millones");
+  assert.equal(run("mil novecientos sesenta coma cinco").text, "1960,5");
+  assert.deepEqual(run("Magnitud nueve coma cinco.").conversions, [{ from: "nueve coma cinco.", to: "9,5." }]);
+});
+
+test("decimales: la cifra dura desde el inicio de la parte entera hasta el final de la decimal", () => {
+  const words = "magnitud nueve coma cinco".split(" ").map((t, i) => W(t, i));
+  words[2].inferred = true;
+  const { words: out } = convertNumerals(words);
+  assert.deepEqual(out.map((w) => w.text), ["magnitud", "9,5"]);
+  assert.equal(out[1].start, words[1].start);
+  assert.equal(out[1].end, words[3].end);
+  assert.equal(out[1].inferred, true);
+});
+
+test("decimales: lo que no es una cifra con coma no se toca", () => {
+  assert.equal(run("estuvo tres semanas en coma").text, "estuvo tres semanas en coma"); // el estado médico
+  assert.equal(run("nueve, coma cinco").text, "nueve, coma cinco"); // puntuación en medio
+  assert.equal(run("nueve coma").text, "nueve coma"); // sin parte decimal
+  assert.equal(run("nueve coma tres cuatro").text, "nueve coma tres cuatro"); // parte decimal no gramatical
+  assert.equal(run("dos coma cinco mil").text, "dos coma cinco mil"); // ambiguo: no se adivina
+  assert.equal(run("doce coma cinco", "off").text, "doce coma cinco");
+  // Los enteros y las fechas siguen como antes.
+  assert.equal(run("el veintidós de mayo de mil novecientos sesenta murieron mil seiscientos").text,
+    "el 22 de mayo de 1960 murieron 1600");
+});
+
+test("de punta a punta: 'nueve coma cinco' es un solo token '9,5', con el ASR en palabras o en dígitos", () => {
+  const story = readJson(fixture("story.backend.json"));
+  const id = story.scenes[0].id;
+  story.scenes[0].narrationText = "Un sismo de magnitud nueve coma cinco sacude Chile.";
+  const asWords = ["Un", "sismo", "de", "magnitud", "nueve", "coma", "cinco", "sacude", "Chile"];
+  const asDigits = ["Un", "sismo", "de", "magnitud", "9,5", "sacude", "Chile"]; // Parakeet suele escribir dígitos
+  for (const tokens of [asWords, asDigits]) {
+    const transcripts = loadTranscripts();
+    transcripts[id] = tokens.map((text, i) => ({ text, start: i * 0.3, end: i * 0.3 + 0.25 }));
+    const { html, words, numeralConversions, warnings } = buildComposition({ story, transcriptsByScene: transcripts, template, options: { title: "t" } });
+    const sceneWords = words.filter((w) => w.scene === id);
+    assert.deepEqual(sceneWords.map((w) => w.text), ["Un", "sismo", "de", "magnitud", "9,5", "sacude", "Chile."], tokens.join(" "));
+    const merged = sceneWords.find((w) => w.text === "9,5");
+    assert.equal(merged.inferred, false, tokens.join(" "));
+    assert.equal(merged.localStart, 4 * 0.3);
+    assert.equal(+merged.localEnd.toFixed(6), +((tokens === asWords ? 6 : 4) * 0.3 + 0.25).toFixed(6));
+    assert.deepEqual(numeralConversions.filter((c) => c.scene === id).map((c) => c.to), ["9,5"]);
+    assert.ok(html.includes('"text":"9,5"'));
+    assert.ok(!html.includes("coma cinco"));
+    assert.ok(!warnings.some((w) => w.includes("inferido") && w.includes("9,5")));
+  }
+});
