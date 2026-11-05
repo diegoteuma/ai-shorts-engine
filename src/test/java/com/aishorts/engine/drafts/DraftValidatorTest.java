@@ -324,6 +324,97 @@ class DraftValidatorTest {
         assertThat(DraftRules.claimsById(lastDraft).get("c1").sources).extracting(s -> s.tier).containsOnlyNulls();
     }
 
+    // --- estándar de fuentes (sección 6): 1 tier A alcanza, salvo en el GANCHO --------------
+    // En el borrador de oro, c1 está en el GANCHO (claim del gancho) y c2 solo en EXPLICACION y
+    // CONTEXTO. NASA y USGS son tier A; Britannica y Smithsonian, tier B.
+
+    @Test
+    void sources_nonHookClaimWithOneTierA_isMediumConfidence_withoutWarning() {
+        claimById(draft, "c2").put("sources", claim("x", "ESTIMACION", "x", USGS).get("sources"));
+        List<Violation> violations = validate();
+        assertThat(violations).isEmpty();
+        StoryDraft.Claim c2 = DraftRules.claimsById(lastDraft).get("c2");
+        assertThat(c2.status).isEqualTo("VERIFICADO");
+        assertThat(c2.confidence).isEqualTo("MEDIA");   // el modelo dijo ALTA: con 1 sola fuente el tope es MEDIA
+        assertThat(lastDraft.checks.sourcesVerified).isTrue();
+    }
+
+    @Test
+    void sources_nonHookClaimWithOneTierA_keepsTheModelsOwnLowConfidence() {
+        claimById(draft, "c2").put("sources", claim("x", "ESTIMACION", "x", USGS).get("sources"));
+        claimById(draft, "c2").put("confidence", "baja");
+        assertThat(validate()).isEmpty();
+        assertThat(DraftRules.claimsById(lastDraft).get("c2").confidence).isEqualTo("BAJA");
+    }
+
+    @Test
+    void sources_nonHookClaimWithOneTierAPlusAnUnknownDomain_isMedium_andOnlyTheUnknownDomainWarns() {
+        String blog = "https://un-blog-cualquiera.net/tunguska";
+        claimById(draft, "c2").put("sources", claim("x", "ESTIMACION", "x", USGS, blog).get("sources"));
+        researched = List.of(NASA, BRITANNICA, USGS, blog);
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("UNKNOWN_DOMAIN_TIER");
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        assertThat(DraftRules.claimsById(lastDraft).get("c2").confidence).isEqualTo("MEDIA");
+    }
+
+    @Test
+    void sources_nonHookClaimWithTwoIndependentTierB_keepsHighConfidence() {
+        claimById(draft, "c2").put("sources", claim("x", "ESTIMACION", "x", BRITANNICA, SMITHSONIAN).get("sources"));
+        assertThat(validate()).isEmpty();
+        assertThat(DraftRules.claimsById(lastDraft).get("c2").confidence).isEqualTo("ALTA");
+    }
+
+    @Test
+    void sources_nonHookClaimWithOneTierBOnly_isWeak_andForcedToLow() {
+        claimById(draft, "c2").put("sources", claim("x", "ESTIMACION", "x", SMITHSONIAN).get("sources"));
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("WEAK_SOURCES");
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        assertThat(violations).anyMatch(v -> "c2".equals(v.claimId()) && v.message().contains("ninguna fuente tier A"));
+        assertThat(DraftRules.claimsById(lastDraft).get("c2").confidence).isEqualTo("BAJA");
+    }
+
+    @Test
+    void sources_nonHookClaimWhoseOnlyTierAWasNotResearched_isWeak_andUnverified() {
+        claimById(draft, "c2").put("sources", claim("x", "ESTIMACION", "x", USGS).get("sources"));
+        researched = List.of(NASA, BRITANNICA, SMITHSONIAN); // USGS no salió de la búsqueda
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.SOFT)).containsExactlyInAnyOrder("SOURCE_NOT_RESEARCHED", "WEAK_SOURCES");
+        StoryDraft.Claim c2 = DraftRules.claimsById(lastDraft).get("c2");
+        assertThat(c2.status).isEqualTo("SIN_VERIFICAR");
+        assertThat(c2.confidence).isEqualTo("BAJA");
+    }
+
+    @Test
+    void sources_hookClaimWithOneTierA_stillNeedsTwo_warnsAndIsForcedToLow() {
+        claimById(draft, "c1").put("sources", claim("x", "HECHO", "x", NASA).get("sources"));
+        List<Violation> violations = validate();
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("WEAK_SOURCES");
+        assertThat(codes(violations, Severity.HARD)).isEmpty();
+        assertThat(violations).anyMatch(v -> "c1".equals(v.claimId()) && v.message().contains("GANCHO exige 2"));
+        assertThat(DraftRules.claimsById(lastDraft).get("c1").confidence).isEqualTo("BAJA");
+        // exige acknowledgeUnverified al aprobar, como antes
+        assertThat(DraftRules.unverifiedOrLowConfidenceClaimIds(lastDraft)).containsExactly("c1");
+    }
+
+    @Test
+    void sources_aClaimCountsAsHookClaimOnlyIfTheGanchoReferencesIt() {
+        // La misma fuente única en c1: si deja de estar en el GANCHO, pasa al estándar general (MEDIA).
+        claimById(draft, "c1").put("sources", claim("x", "HECHO", "x", NASA).get("sources"));
+        scene(draft, 0).put("claimIds", new ArrayList<>(List.of("c2")));
+        assertThat(validate()).isEmpty();
+        assertThat(DraftRules.claimsById(lastDraft).get("c1").confidence).isEqualTo("MEDIA");
+        assertThat(DraftRules.hookClaimIds(lastDraft)).containsExactly("c2");
+    }
+
+    @Test
+    void sources_hypothesisClaimsAreNotJudgedBySourceStrength() {
+        // c3 (HIPOTESIS, sin fuentes, en GIRO y CONSECUENCIA) no es una claim REAL: ni aviso ni BAJA.
+        assertThat(validate()).isEmpty();
+        assertThat(DraftRules.claimsById(lastDraft).get("c3").confidence).isEqualTo("ALTA");
+    }
+
     @Test
     void soft_topicOrTitleAlreadyExists() {
         existing = List.of(new ExistingStory("tunguska", "Otra cosa", "  ESTALLIDO de Tunguska de 1908! "));

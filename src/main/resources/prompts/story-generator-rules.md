@@ -48,7 +48,7 @@ Reglas duras: **total entre 92 y 104 palabras**; ninguna escena de más de 8 s (
 
 **Texto en pantalla del gancho (`hookText`).** De **2 a 5 palabras**, en español, que nombran la anomalía o la cifra central (por ejemplo "AURORAS EN EL TRÓPICO", "EXPLOSIÓN SIN CRÁTER"). Se muestra grande desde el primer fotograma. Debe estar respaldado por una claim de la escena GANCHO, igual que la narración: nada que la narración y sus fuentes no sostengan. Sin signos de pregunta ni "¿y si…?".
 
-**Detalle humano real (EXPLICACION o CONTEXTO).** Al menos una de esas dos escenas incluye un hecho sensorial o humano **documentado** que dé escala: lo que la gente vio, oyó o perdió (por ejemplo, tímpanos reventados, ventanas rotas a X kilómetros, el cielo oscuro a mediodía, cosechas perdidas). Es una afirmación más: lleva su claim y cumple el mismo estándar de fuentes de la sección 6. Si no encuentras uno con 2 fuentes, no lo inventes: dilo en `risks`.
+**Detalle humano real (EXPLICACION o CONTEXTO).** Al menos una de esas dos escenas incluye un hecho sensorial o humano **documentado** que dé escala: lo que la gente vio, oyó o perdió (por ejemplo, tímpanos reventados, ventanas rotas a X kilómetros, el cielo oscuro a mediodía, cosechas perdidas). Es una afirmación más: lleva su claim y cumple el mismo estándar de fuentes de la sección 6. Si no encuentras uno con al menos una fuente tier A, no lo inventes: dilo en `risks`.
 
 **GIRO.** Debe contener una marca inequívoca de hipótesis ("Ahora imaginemos…", "¿Y si…?") y plantear **una sola** variable cambiada. A partir de aquí todo el lenguaje va en condicional ("habría", "podría").
 
@@ -79,9 +79,24 @@ Calidad de fuentes:
 - **Tier B**: secundarias de reputación (enciclopedias de referencia, revistas de divulgación consolidadas).
 - Nada de blogs, foros ni agregadores como respaldo. Wikipedia sirve para orientarse, **nunca como única fuente**.
 
+Investigación mínima (la búsqueda es cara: cada búsqueda vuelve a leer estas reglas y todos los resultados anteriores):
+
+- **Solo se verifica lo que se dice.** Busca respaldo únicamente para las afirmaciones que van en la narración de las escenas 1-3, el `title` y el `hookText` (normalmente 4 a 6 claims). No investigues detalles que no van a la narración.
+- **Primero, una fuente primaria que cubra varias claims** (USGS, NOAA, NASA, una universidad o un paper): una búsqueda bien elegida debería respaldar a la vez la fecha, el lugar, la magnitud y las cifras. Plan sugerido: 1-2 búsquedas para el evento, 1 para el dato del gancho y 1 para el detalle humano.
+- **Si una claim no queda respaldada con lo que ya encontraste, márcala `SIN_VERIFICAR` o sácala de la narración.** No sigas buscando para cubrirla.
+- **No escribas código para investigar** (ni para filtrar, contar o resumir resultados). Las palabras de cada escena se cuentan directamente.
+
+Estándar de fuentes por claim:
+
+- **Una fuente tier A** consultada alcanza para `VERIFICADO` con `confidence: MEDIA`.
+- **Dos fuentes independientes tier A/B**, de dominios distintos, dan `confidence: ALTA`.
+- Sin ninguna fuente tier A, una sola tier B no alcanza: `confidence: BAJA`.
+- **Excepción: la claim del gancho** (la de la escena GANCHO, que respalda las primeras palabras y el `hookText`) exige **2 fuentes independientes tier A/B**. Si no las tiene, marca `confidence: BAJA` y avísalo en `risks`.
+- Una persona revisa las fuentes antes de aprobar (PUERTA 0): esa es la segunda verificación.
+
 Reglas:
 
-1. **Cifras clave** (las que aparecen en la narración o el título): mínimo **2 fuentes independientes** tier A/B, de dominios distintos. Si solo hay una, marca `confidence: BAJA` y avísalo en `risks`.
+1. **Cifras clave** (las que aparecen en la narración o el título): aplica el estándar de arriba. Una fuente tier A alcanza (`MEDIA`), salvo para la claim del gancho, que necesita 2. Si no llegas al mínimo, marca `confidence: BAJA` y avísalo en `risks`.
 2. **Cifra discutida o con rango**: usa el rango o una fórmula honesta ("unos", "se estima", "entre X y Y"). Nunca redondees hacia arriba por impacto ni quites la incertidumbre. Ejemplo de cuidado: una cifra famosa como "80 millones de árboles" en Tunguska es una **estimación**, no una medición; si la usas, enmárcala como estimación y respáldala con fuentes.
 3. **Superlativos** ("el mayor", "el primero", "el único"): solo con fuente directa; si no, quítalos. Los absolutos cuentan como superlativos: "jamás", "nunca", "siempre", "todo/toda", "continentes enteros" y las exageraciones geográficas ("cerca del ecuador"). Solo con una fuente que lo diga literalmente; si no, usa la forma acotada ("la más fuerte conocida", "a latitudes tropicales"). Aplica también al `title`.
 4. **Si no puedes verificarlo, no lo incluyas.** No rellenes con lo que "suena bien".
@@ -203,7 +218,7 @@ Modo PROPUESTAS: devuelve solo JSON válido con la forma `{ "candidates": [ { "t
 1. ¿6 escenas, roles y orden exactos?
 2. ¿Total de palabras entre 92 y 104, ninguna escena fuera de 3-8 s?
 3. ¿Cada oración de 1-3 tiene `claimIds`, y cada oración de 4-5 está atada a `whatIf`?
-4. ¿Cifras clave con 2 fuentes tier A/B, o marcadas como BAJA o SIN_VERIFICAR?
+4. ¿Cada claim de 1-3 tiene al menos una fuente tier A consultada (`MEDIA`), o dos tier A/B independientes (`ALTA`)? ¿La claim del gancho tiene 2 fuentes tier A/B o va como BAJA y en `risks`? ¿Lo que no se pudo respaldar está como SIN_VERIFICAR o fuera de la narración, en vez de haber seguido buscando?
 5. ¿Alguna cifra redondeada hacia arriba, superlativo sin fuente o URL que no consultaste?
 6. ¿Hipótesis marcada en el GIRO y en condicional en la CONSECUENCIA? ¿La CONSECUENCIA está en escala humana (vida diaria, segunda persona cuando se pueda) y sin víctimas inventadas?
 7. ¿Escenas REAL en presente histórico, frases cortas que escalan y cada escena más tensa que la anterior? ¿Hay un detalle humano real, con claim y fuentes, en la EXPLICACION o el CONTEXTO? ¿El CIERRE deja la amenaza abierta, y si afirma una recurrencia, tiene claim con fuentes?

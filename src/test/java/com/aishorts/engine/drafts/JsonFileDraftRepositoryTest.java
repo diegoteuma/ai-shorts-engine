@@ -60,6 +60,29 @@ class JsonFileDraftRepositoryTest {
     }
 
     @Test
+    void aDraftSavedBeforeCacheFieldsAndCost_stillLoads_withZerosAndNullCost() throws Exception {
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("viejo.json"), """
+                {"id":"viejo","title":"t","status":"PENDING_REVIEW",
+                 "usage":{"inputTokens":331207,"outputTokens":58441,"webSearchRequests":10}}""");
+        StoryDraft loaded = new JsonFileDraftRepository(dir, new ObjectMapper()).findById("viejo").orElseThrow();
+        assertThat(loaded.usage).isEqualTo(new DraftUsage(331207, 58441, 10, 0, 0));
+        assertThat(loaded.estimatedCostUsd).isNull();
+    }
+
+    @Test
+    void usageWithCacheFieldsAndCost_roundTrip() {
+        JsonFileDraftRepository repository = new JsonFileDraftRepository(dir, new ObjectMapper());
+        StoryDraft saved = draft("con-cache", "x");
+        saved.usage = new DraftUsage(1000, 200, 3, 50_000, 400_000);
+        saved.estimatedCostUsd = 0.2345;
+        repository.create(saved);
+        StoryDraft loaded = repository.findById("con-cache").orElseThrow();
+        assertThat(loaded.usage).isEqualTo(saved.usage);
+        assertThat(loaded.estimatedCostUsd).isEqualTo(0.2345);
+    }
+
+    @Test
     void constructor_doesNotCreateTheDirectory_untilTheFirstSave() {
         new JsonFileDraftRepository(dir.resolve("lazy"), new ObjectMapper());
         assertThat(dir.resolve("lazy")).doesNotExist();

@@ -41,6 +41,8 @@ import java.util.Set;
  */
 public final class StoryDraftService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(StoryDraftService.class);
+
     /** Rango que se le pasa al StoryBrief al aprobar; StoryDraftingService no lo usa para armar la Story. */
     private static final DurationBudget PIPELINE_BUDGET = DurationBudget.ofSeconds(35, 40);
     private static final int CANDIDATE_COUNT = 5;
@@ -205,6 +207,10 @@ public final class StoryDraftService {
         draft.createdAt = OffsetDateTime.now(clock).toString();
         draft.researchedUrls = new ArrayList<>(researched);
         draft.usage = usage;
+        draft.estimatedCostUsd = DraftCost.estimateUsd(usage, properties.pricing());
+        log.info("Costo estimado del borrador: {} USD ({} in, {} out, {} búsquedas; caché: {} escritos, {} leídos)",
+                String.format(Locale.ROOT, "%.4f", draft.estimatedCostUsd), usage.inputTokens(), usage.outputTokens(),
+                usage.webSearchRequests(), usage.cacheCreationInputTokens(), usage.cacheReadInputTokens());
         draft.generationAttempts = diagnostics;
         setViolations(draft, violations);
         return draft;

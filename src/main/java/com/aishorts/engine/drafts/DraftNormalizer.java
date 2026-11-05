@@ -142,6 +142,7 @@ public final class DraftNormalizer {
         }
 
         Set<String> realClaimIds = DraftRules.realClaimIds(draft);
+        Set<String> hookClaimIds = DraftRules.hookClaimIds(draft);
         for (Claim claim : DraftRules.claims(draft)) {
             if (claim == null) {
                 continue;
@@ -160,9 +161,17 @@ public final class DraftNormalizer {
             claim.status = modelSaysVerified && allResearched ? DraftRules.VERIFIED : DraftRules.UNVERIFIED;
             claim.type = upper(claim.type);
             claim.confidence = upper(claim.confidence);
-            if (realClaimIds.contains(claim.id)
-                    && DraftRules.independentTierABDomains(claim, researched, sourcePolicy) < 2) {
-                claim.confidence = DraftRules.LOW_CONFIDENCE;
+            if (realClaimIds.contains(claim.id)) {
+                // Estándar de la sección 6: 1 tier A alcanza para MEDIA (tope: un ALTA del modelo baja a
+                // MEDIA, un BAJA del modelo se respeta); 2 dominios A/B admiten ALTA. Las claims del GANCHO
+                // siguen exigiendo 2: con menos, BAJA.
+                DraftRules.SourceStrength strength = DraftRules.sourceStrength(claim, researched, sourcePolicy);
+                if (DraftRules.forcesLowConfidence(strength, hookClaimIds.contains(claim.id))) {
+                    claim.confidence = DraftRules.LOW_CONFIDENCE;
+                } else if (strength == DraftRules.SourceStrength.SINGLE_TIER_A
+                        && !DraftRules.LOW_CONFIDENCE.equals(claim.confidence)) {
+                    claim.confidence = DraftRules.MEDIUM_CONFIDENCE;
+                }
             }
         }
 
