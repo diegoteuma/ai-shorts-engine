@@ -72,7 +72,7 @@ class DraftValidatorTest {
     @Test
     void serverRecalculatesWordsChecksTierAndAccessed_ignoringWhatTheModelSent() {
         validate();
-        assertThat(lastDraft.scenes).extracting(s -> s.words).containsExactly(12, 19, 18, 15, 18, 12);
+        assertThat(lastDraft.scenes).extracting(s -> s.words).containsExactly(10, 19, 19, 16, 18, 12);
         assertThat(lastDraft.scenes.get(1).estimatedSeconds).isEqualTo(7.17);
         assertThat(lastDraft.checks.totalWords).isEqualTo(94);
         assertThat(lastDraft.checks.estimatedSeconds).isEqualTo(35.47);
@@ -170,7 +170,8 @@ class DraftValidatorTest {
 
     @Test
     void hard_sceneLongerThanMaxSeconds() {
-        scene(draft, 0).put("narrationText", words(22)); // 22 / 2.65 = 8.3 s; total 104
+        scene(draft, 0).put("narrationText", words(22)); // 22 / 2.65 = 8.3 s
+        scene(draft, 1).put("narrationText", words(17)); // total 104: solo falla la duración de la escena
         assertOnly(Severity.HARD, "SCENE_DURATION");
     }
 
@@ -440,10 +441,10 @@ class DraftValidatorTest {
 
     @Test
     void soft_hookStartsWithYear_carrington() {
-        scene(draft, 0).put("narrationText", CARRINGTON_HOOK); // 13 palabras: total 95, sigue válido
+        scene(draft, 0).put("narrationText", CARRINGTON_HOOK); // 13 palabras: total 97, sigue válido (pero fuera de 8-11)
         List<Violation> violations = validate();
         assertThat(codes(violations, Severity.HARD)).isEmpty();
-        assertThat(codes(violations, Severity.SOFT)).containsExactly("HOOK_STARTS_WITH_DATE");
+        assertThat(codes(violations, Severity.SOFT)).containsExactly("SCENE_WORDS_RANGE", "HOOK_STARTS_WITH_DATE");
         assertThat(violations).allMatch(v -> "tunguska-x-gancho".equals(v.sceneId()));
     }
 
@@ -613,7 +614,7 @@ class DraftValidatorTest {
         scene(draft, 0).put("visualPrompt", ANCHOR + ", one continuous wide shot. At 0 seconds the frame already shows a "
                 + "white-hot fireball expanding high above the taiga at real-time speed.");
         scene(draft, 1).put("visualPrompt", TUNGUSKA_AFTERMATH_PROMPT); // EXPLICACION: la regla es solo del GANCHO
-        scene(draft, 0).put("narrationText", "Una ruina " + words(10)); // la narración no cuenta, solo el prompt
+        scene(draft, 0).put("narrationText", "Una ruina " + words(8)); // la narración no cuenta, solo el prompt
         draft.put("title", "Ruins del bosque: explosión en la taiga");
         List<Violation> violations = validate();
         // solo el CALM_VISUAL del "quiet" en la EXPLICACION, ningún aviso del GANCHO
@@ -724,5 +725,71 @@ class DraftValidatorTest {
         researched = List.of(NASA, BRITANNICA);
         validate();
         assertThat(DraftRules.unverifiedOrLowConfidenceClaimIds(lastDraft)).containsExactly("c2");
+    }
+
+    // --- SOFT: demasiados eventos encadenados en un clip -------------------------------------
+
+    private static final String THREE_SEQUENCE_PROMPT = ANCHOR + ", a massive dark tsunami wave surges over the seawall of a 1960 "
+            + "Japanese harbor town at real-time speed. A fraction of a second later, wooden fishing boats are lifted onto the street. "
+            + "A moment later, curved tile roofs collapse between kanji shop signs. Then the water pours between the buildings.";
+
+    @Test
+    void soft_tooManyEvents_whenMoreThanTwoSentencesChainAnotherEvent() {
+        scene(draft, 2).put("visualPrompt", THREE_SEQUENCE_PROMPT);
+        assertOnly(Severity.SOFT, "TOO_MANY_EVENTS");
+        assertThat(validate()).filteredOn(v -> v.code().equals("TOO_MANY_EVENTS"))
+                .singleElement().satisfies(v -> {
+                    assertThat(v.sceneId()).isEqualTo("tunguska-x-contexto");
+                    assertThat(v.message()).contains("3 frases");
+                });
+        assertThat(codes(validate(), Severity.HARD)).isEmpty();
+    }
+
+    @Test
+    void notTooManyEvents_withTwoChainingSentences_orWhenThePhrasesAreNotAtTheStartOfASentence() {
+        // Dos frases de secuencia: el máximo, sin aviso.
+        scene(draft, 2).put("visualPrompt", ANCHOR + ", a dark wave surges over the seawall at real-time speed. "
+                + "A fraction of a second later, boats are lifted onto the street. Then the water pours between the buildings.");
+        assertThat(validate()).isEmpty();
+        // "then" en medio de una frase, "Thence" y "A moment" sin "later" no cuentan.
+        scene(draft, 2).put("visualPrompt", ANCHOR + ", the wave rises and then breaks. Thence the water spreads. "
+                + "A moment of silence. A fraction of a second later, boats lift. Then roofs fall.");
+        assertThat(validate()).isEmpty();
+    }
+
+    @Test
+    void sequenceSentences_countsOnlyTheClosedListAtTheStartOfEachSentence_ignoringCase() {
+        assertThat(DraftValidator.sequenceSentences(THREE_SEQUENCE_PROMPT)).isEqualTo(3);
+        assertThat(DraftValidator.sequenceSentences("first. THEN, second! a moment later third? \"Then\" fourth.")).isEqualTo(3);
+        assertThat(DraftValidator.sequenceSentences("A  fraction of a second later, one.")).isEqualTo(1);
+        assertThat(DraftValidator.sequenceSentences("Afterwards, one. Later, two.")).isZero();
+        assertThat(DraftValidator.sequenceSentences(null)).isZero();
+        assertThat(DraftValidator.sequenceSentences("   ")).isZero();
+    }
+
+    // --- locationLabel (rótulo de lugar y fecha) ---------------------------------------------
+
+    @Test
+    void locationLabel_isReadTrimmed_andAValidOneOnARealSceneHasNoViolations() {
+        scene(draft, 0).put("locationLabel", "  JAPÓN · MAYO 1960 ");
+        scene(draft, 2).put("locationLabel", "   "); // en blanco = sin rótulo
+        assertThat(validate()).isEmpty();
+        assertThat(lastDraft.scenes.get(0).locationLabel).isEqualTo("JAPÓN · MAYO 1960");
+        assertThat(lastDraft.scenes.get(2).locationLabel).isNull();
+        assertThat(lastDraft.scenes.get(1).locationLabel).isNull(); // ausente
+    }
+
+    @Test
+    void soft_locationLabelLongerThan25Characters() {
+        scene(draft, 2).put("locationLabel", "X".repeat(25)); // exactamente 25: sin aviso
+        assertThat(validate()).isEmpty();
+        scene(draft, 2).put("locationLabel", "TUNGUSKA · 30 DE JUNIO 1908"); // 27
+        assertOnly(Severity.SOFT, "LOCATION_LABEL_LENGTH");
+    }
+
+    @Test
+    void soft_locationLabelOutsideTheRealScenes() {
+        scene(draft, 4).put("locationLabel", "UNA GRAN CIUDAD · HOY");
+        assertOnly(Severity.SOFT, "LOCATION_LABEL_NOT_REAL");
     }
 }

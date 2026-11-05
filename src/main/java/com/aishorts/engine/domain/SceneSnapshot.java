@@ -39,6 +39,8 @@ public record SceneSnapshot(
         String generationFailureReason,
         String localClipPath,
         String localClipFailureReason,
-        double clipStartOffset
+        double clipStartOffset,
+        /** Rótulo de lugar y fecha en pantalla (p. ej. "JAPÓN · MAYO 1960"); null = sin rótulo. */
+        String locationLabel
 ) {
 }

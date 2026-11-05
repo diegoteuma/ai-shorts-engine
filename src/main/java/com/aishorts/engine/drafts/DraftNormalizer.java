@@ -202,6 +202,9 @@ public final class DraftNormalizer {
         scene.order = intOrNull(node, "order");
         scene.narrationText = text(node, "narrationText");
         scene.visualPrompt = text(node, "visualPrompt");
+        // Opcional: rótulo de lugar y fecha en pantalla. Vacío = sin rótulo.
+        String locationLabel = text(node, "locationLabel");
+        scene.locationLabel = locationLabel == null || locationLabel.isBlank() ? null : locationLabel.strip();
         scene.visualConstraints = stringList(node.get("visualConstraints"));
         scene.claimIds = stringList(node.get("claimIds"));
         return scene;

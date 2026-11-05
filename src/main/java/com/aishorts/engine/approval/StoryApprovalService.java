@@ -231,10 +231,43 @@ public final class StoryApprovalService {
      * llamarlo a propósito, como un paso explícito más.
      */
     public BatchResult generateApprovedScenes(Story story) {
-        List<String> succeeded = new java.util.ArrayList<>();
-        Map<String, String> failed = new LinkedHashMap<>();
+        return submitGenerations(story.scenesReadyToGenerate(), new LinkedHashMap<>());
+    }
 
-        for (Scene scene : story.scenesReadyToGenerate()) {
+    /**
+     * Igual que {@link #generateApprovedScenes(Story)}, pero solo para las
+     * escenas indicadas (la compuerta del GANCHO: generarlo y revisarlo antes
+     * de pagar el resto). Una escena inexistente, o que no está lista para
+     * generar (costo sin aprobar o generación ya iniciada), va a
+     * failedSceneIds con el motivo y no bloquea a las demás. Lista vacía o
+     * null es un error: para generar todo se usa el método sin lista.
+     */
+    public BatchResult generateApprovedScenes(Story story, List<String> sceneIds) {
+        if (sceneIds == null || sceneIds.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "sceneIds no puede estar vacío; para generar todas las escenas aprobadas omite el body");
+        }
+        List<Scene> toGenerate = new java.util.ArrayList<>();
+        Map<String, String> failed = new LinkedHashMap<>();
+        for (String sceneId : sceneIds.stream().distinct().toList()) {
+            try {
+                Scene scene = findScene(story, sceneId);
+                if (!scene.isReadyToGenerate()) {
+                    throw new IllegalStateException("La escena '" + sceneId + "' no está lista para generar (costo: "
+                            + scene.costStatus() + ", generación: " + scene.generationStatus() + ").");
+                }
+                toGenerate.add(scene);
+            } catch (RuntimeException e) {
+                failed.put(sceneId, e.getMessage());
+            }
+        }
+        return submitGenerations(toGenerate, failed);
+    }
+
+    private BatchResult submitGenerations(List<Scene> scenes, Map<String, String> failed) {
+        List<String> succeeded = new java.util.ArrayList<>();
+
+        for (Scene scene : scenes) {
             try {
                 Map<String, Object> parameters = buildGenerationParameters(scene, scene.chosenModelId());
                 GenerationResponse response = higgsfieldClient.submitGeneration(

@@ -85,6 +85,7 @@ public final class SnapshotMapper {
         map.put("localClipPath", scene.localClipPath());
         map.put("localClipFailureReason", scene.localClipFailureReason());
         map.put("clipStartOffset", scene.clipStartOffset());
+        map.put("locationLabel", scene.locationLabel());
         return map;
     }
 
@@ -115,7 +116,9 @@ public final class SnapshotMapper {
                 str(map, "localClipPath"),
                 str(map, "localClipFailureReason"),
                 // Ausente en los JSON guardados antes de existir el corte: 0 (el clip desde el inicio).
-                doubleOrZero(map, "clipStartOffset")
+                doubleOrZero(map, "clipStartOffset"),
+                // Ausente en los JSON guardados antes del rótulo de lugar: null (sin rótulo).
+                str(map, "locationLabel")
         );
     }
 

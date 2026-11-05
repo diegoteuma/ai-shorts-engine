@@ -92,6 +92,9 @@ class JsonFileStoryRepositoryTest {
         assertThat(Files.readString(base.resolve("tunguska.json"))).doesNotContain("hookText").doesNotContain("clipStartOffset");
         assertThat(story.hookText()).isNull();
         assertThat(story.scenes()).allMatch(s -> s.clipStartOffset() == 0.0);
+        // Y anterior a locationLabel: sin rótulo.
+        assertThat(Files.readString(base.resolve("tunguska.json"))).doesNotContain("locationLabel");
+        assertThat(story.scenes()).allMatch(s -> s.locationLabel() == null);
     }
 
     @Test
@@ -99,12 +102,14 @@ class JsonFileStoryRepositoryTest {
         JsonFileStoryRepository repo = new JsonFileStoryRepository(tmp.resolve("stories"), mapper);
         Scene scene = new Scene("h-gancho", SceneRole.GANCHO, 1, "narración", "prompt", Duration.ofSeconds(4));
         scene.setClipStartOffset(2.75);
+        scene.setLocationLabel(" JAPÓN · MAYO 1960 ");
         repo.save(new Story("h", "tema", "título", "EXPLOSIÓN SIN CRÁTER", List.of(scene)));
 
         Story loaded = repo.findById("h").orElseThrow();
 
         assertThat(loaded.hookText()).isEqualTo("EXPLOSIÓN SIN CRÁTER");
         assertThat(loaded.scenes().get(0).clipStartOffset()).isEqualTo(2.75);
+        assertThat(loaded.scenes().get(0).locationLabel()).isEqualTo("JAPÓN · MAYO 1960");
     }
 
     @Test

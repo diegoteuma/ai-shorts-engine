@@ -2,6 +2,8 @@ package com.aishorts.engine.config;
 
 import com.aishorts.engine.approval.StoryApprovalService;
 import com.aishorts.engine.clips.ClipDownloader;
+import com.aishorts.engine.clips.ClipFrameExtractor;
+import com.aishorts.engine.video.SystemProcessRunner;
 import com.aishorts.engine.clips.ClipStore;
 import com.aishorts.engine.clips.HttpClipDownloader;
 import com.aishorts.engine.claude.ClaudeConfig;
@@ -32,6 +34,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -128,10 +131,12 @@ public class EngineConfiguration {
             @Value("${engine.duration-warnings.min-scene-seconds}") double minSceneSeconds,
             @Value("${engine.duration-warnings.max-scene-seconds}") double maxSceneSeconds,
             @Value("${engine.duration-warnings.min-total-seconds}") double minTotalSeconds,
-            @Value("${engine.duration-warnings.max-total-seconds}") double maxTotalSeconds
+            @Value("${engine.duration-warnings.max-total-seconds}") double maxTotalSeconds,
+            @Value("${engine.duration-warnings.min-hook-seconds}") double minHookSeconds,
+            @Value("${engine.duration-warnings.max-words-per-second}") double maxWordsPerSecond
     ) {
-        return new ActualDurationChecker(
-                ActualDurationChecker.Limits.ofSeconds(minSceneSeconds, maxSceneSeconds, minTotalSeconds, maxTotalSeconds));
+        return new ActualDurationChecker(ActualDurationChecker.Limits.ofSeconds(
+                minSceneSeconds, maxSceneSeconds, minTotalSeconds, maxTotalSeconds, minHookSeconds, maxWordsPerSecond));
     }
 
     @Bean
@@ -162,6 +167,21 @@ public class EngineConfiguration {
             @Value("${clip-download.min-free-bytes}") long minFreeBytes
     ) {
         return new ClipStore(Path.of(clipsDir), clipDownloader, expectedWidth, expectedHeight, minFreeBytes);
+    }
+
+    /**
+     * Fotogramas de revisión (POST /stories/{id}/scenes/{sceneId}/frames). Un
+     * SystemProcessRunner propio: el del video final solo existe con
+     * engine.final-video.enabled=true.
+     */
+    @Bean
+    ClipFrameExtractor clipFrameExtractor(
+            @Value("${engine.frames.dir}") String framesDir,
+            @Value("${engine.frames.ffmpeg-command}") String ffmpegCommand,
+            @Value("${engine.frames.timeout-seconds}") long timeoutSeconds
+    ) {
+        return new ClipFrameExtractor(Path.of(framesDir), List.of(ffmpegCommand), new SystemProcessRunner(),
+                Duration.ofSeconds(timeoutSeconds));
     }
 
     @Bean

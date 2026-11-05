@@ -77,6 +77,37 @@ public final class DraftValidator {
                     + "|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?![\\p{L}\\p{N}]))",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
+    /**
+     * Frases del visualPrompt que encadenan un evento más (SOFT
+     * TOO_MANY_EVENTS si hay más de MAX_SEQUENCE_SENTENCES). Lista cerrada:
+     * la frase tiene que EMPEZAR con una de estas, sin distinguir mayúsculas
+     * y como palabras completas ("Then," sí; "Thence" no).
+     */
+    static final List<String> SEQUENCE_SENTENCE_STARTS = List.of("A fraction of a second later", "A moment later", "Then");
+    static final int MAX_SEQUENCE_SENTENCES = 2;
+    /** Rótulo de lugar y fecha (SOFT LOCATION_LABEL_LENGTH por encima). */
+    static final int MAX_LOCATION_LABEL_CHARS = 25;
+    private static final Pattern SEQUENCE_SENTENCE_START = Pattern.compile(
+            "^[\\s\"'“‘(]*(?:" + String.join("|", SEQUENCE_SENTENCE_STARTS.stream()
+                    .map(s -> Pattern.quote(s).replace(" ", "\\E\\s+\\Q")).toList()) + ")(?![\\p{L}\\p{N}])",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    /** Fin de frase: . ! ? (o …) seguido de espacio. */
+    private static final Pattern SENTENCE_BREAK = Pattern.compile("(?<=[.!?…])\\s+");
+
+    /** Cuántas frases del prompt empiezan con una de SEQUENCE_SENTENCE_STARTS. */
+    static int sequenceSentences(String visualPrompt) {
+        if (visualPrompt == null || visualPrompt.isBlank()) {
+            return 0;
+        }
+        int count = 0;
+        for (String sentence : SENTENCE_BREAK.split(visualPrompt.trim())) {
+            if (SEQUENCE_SENTENCE_START.matcher(sentence).find()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     public DraftValidator(DraftsProperties properties, SourcePolicy sourcePolicy) {
         this.properties = properties;
         this.sourcePolicy = sourcePolicy;
@@ -280,6 +311,23 @@ public final class DraftValidator {
                         + term + "'; ningún rol es sereno ni contemplativo: la amenaza debería estar presente en cuadro."));
             }
         });
+        if (scene.locationLabel != null) {
+            int length = scene.locationLabel.codePointCount(0, scene.locationLabel.length());
+            if (length > MAX_LOCATION_LABEL_CHARS) {
+                violations.add(Violation.softScene("LOCATION_LABEL_LENGTH", scene.id, where + ": el locationLabel tiene "
+                        + length + " caracteres; máximo ~" + MAX_LOCATION_LABEL_CHARS + " (texto chico, en una línea)."));
+            }
+            if (!DraftRules.isReal(role)) {
+                violations.add(Violation.softScene("LOCATION_LABEL_NOT_REAL", scene.id, where
+                        + ": el locationLabel es para escenas REAL (1-3): un lugar y una fecha respaldados por sus claims."));
+            }
+        }
+        int sequence = sequenceSentences(prompt);
+        if (sequence > MAX_SEQUENCE_SENTENCES) {
+            violations.add(Violation.softScene("TOO_MANY_EVENTS", scene.id, where + ": el visualPrompt tiene " + sequence
+                    + " frases que encadenan otro evento (" + String.join(" / ", SEQUENCE_SENTENCE_STARTS) + "); máximo "
+                    + MAX_SEQUENCE_SENTENCES + ". Un solo evento visible por clip, nombrado en la primera frase."));
+        }
         String narration = scene.narrationText != null ? scene.narrationText : "";
         if (role == SceneRole.GANCHO) {
             if (HOOK_DATE_START.matcher(narration).find()) {

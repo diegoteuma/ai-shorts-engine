@@ -35,7 +35,7 @@ final class DraftFixtures {
     static final String ANCHOR = "Hyperrealistic cinematic disaster documentary footage, vertical 9:16 composition";
     static final String[] ROLES = {"GANCHO", "EXPLICACION", "CONTEXTO", "GIRO", "CONSECUENCIA", "CIERRE"};
     /** Dentro del rango de cada rol; total 94 (92-104), cada escena entre 3 y 8 s a 2.65 palabras/s. */
-    static final int[] WORDS = {12, 19, 18, 15, 18, 12};
+    static final int[] WORDS = {10, 19, 19, 16, 18, 12};
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 

@@ -71,11 +71,25 @@ export function buildTimeline(story, { durationOverrides = {} } = {}) {
       start,
       duration: round6(duration),
       clipStartOffset: round6(clipStartOffset),
+      locationLabel: readLocationLabel(s),
     });
     cursor = round6(start + duration);
   }
 
   return { scenes, totalDuration: round6(cursor) };
+}
+
+/**
+ * Rótulo de lugar y fecha de una escena (backend: Scene.locationLabel, p. ej. "JAPÓN · MAYO 1960").
+ * Ausente (historias viejas), null o vacío: null (no se dibuja nada).
+ */
+export function readLocationLabel(scene) {
+  const label = scene?.locationLabel;
+  if (label === undefined || label === null) return null;
+  if (typeof label !== "string") {
+    throw new Error(`La escena ${scene.id} tiene un locationLabel que no es texto: ${JSON.stringify(label)}`);
+  }
+  return label.trim() === "" ? null : label.trim();
 }
 
 /** Texto en pantalla del gancho (backend: Story.hookText). Ausente, null o vacío: null (no se dibuja nada). */

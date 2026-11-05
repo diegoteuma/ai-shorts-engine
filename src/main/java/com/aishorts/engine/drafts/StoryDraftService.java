@@ -333,7 +333,8 @@ public final class StoryDraftService {
                     + "); solo se edita un borrador PENDING_REVIEW.");
         }
         if (edit.isEmpty()) {
-            throw new DraftException(400, "No hay nada que editar: manda 'title', 'hookText', 'narrationEdits' y/o 'promptEdits'.");
+            throw new DraftException(400, "No hay nada que editar: manda 'title', 'hookText', 'narrationEdits', "
+                    + "'promptEdits' y/o 'locationEdits'.");
         }
         if (edit.title() != null && edit.title().isBlank()) {
             throw new DraftException(400, "'title' no puede quedar vacío.");
@@ -342,6 +343,7 @@ public final class StoryDraftService {
         Map<String, DraftScene> scenesById = scenesById(draft);
         checkEdits(edit.narrationEdits(), scenesById, "narrationEdits");
         checkEdits(edit.promptEdits(), scenesById, "promptEdits");
+        checkLocationEdits(edit.locationEdits(), scenesById);
 
         if (edit.title() != null) {
             draft.title = edit.title().strip();
@@ -350,6 +352,7 @@ public final class StoryDraftService {
             draft.hookText = edit.hookText().strip();
         }
         applyEdits(scenesById, edit.narrationEdits(), edit.promptEdits());
+        applyLocationEdits(scenesById, edit.locationEdits());
         normalizer.recalculate(draft, draft.researchedUrls, accessedDate(draft));
         // Igual que al aprobar: el propio id del borrador no cuenta como ocupado.
         setViolations(draft, validator.validate(draft,
@@ -375,6 +378,7 @@ public final class StoryDraftService {
         Map<String, DraftScene> scenesById = scenesById(draft);
         checkEdits(decision.narrationEdits(), scenesById, "narrationEdits");
         checkEdits(decision.promptEdits(), scenesById, "promptEdits");
+        checkLocationEdits(decision.locationEdits(), scenesById);
 
         if (decision.decision() == Decision.REJECT) {
             if (decision.note() == null || decision.note().isBlank()) {
@@ -388,6 +392,7 @@ public final class StoryDraftService {
 
         checkHookText(decision.hookText());
         applyEdits(scenesById, decision.narrationEdits(), decision.promptEdits());
+        applyLocationEdits(scenesById, decision.locationEdits());
         if (decision.hookText() != null) {
             draft.hookText = decision.hookText().strip();
         }
@@ -437,6 +442,23 @@ public final class StoryDraftService {
         }
     }
 
+    /** Rótulo de lugar: la escena tiene que existir; un texto vacío quita el rótulo (es opcional, a diferencia de la narración). */
+    private static void checkLocationEdits(List<DraftDecision.SceneTextEdit> edits, Map<String, DraftScene> scenesById) {
+        for (DraftDecision.SceneTextEdit edit : edits) {
+            if (edit == null || edit.sceneId() == null || !scenesById.containsKey(edit.sceneId())) {
+                throw new DraftException(400, "locationEdits: la escena '" + (edit != null ? edit.sceneId() : null)
+                        + "' no existe en este borrador.");
+            }
+        }
+    }
+
+    private static void applyLocationEdits(Map<String, DraftScene> scenesById, List<DraftDecision.SceneTextEdit> edits) {
+        for (DraftDecision.SceneTextEdit edit : edits) {
+            String text = edit.text() == null ? "" : edit.text().strip();
+            scenesById.get(edit.sceneId()).locationLabel = text.isEmpty() ? null : text;
+        }
+    }
+
     /** null = no se cambia; vacío no se acepta (el aviso SOFT de hookText ausente es para lo que trae el modelo). */
     private static void checkHookText(String hookText) {
         if (hookText != null && hookText.isBlank()) {
@@ -472,6 +494,11 @@ public final class StoryDraftService {
         StoryBrief brief = new StoryBrief(draft.topic, draft.title, coreFacts, List.of(), PIPELINE_BUDGET);
         ScriptDraftingService reviewedScenes = ignored -> sceneDrafts;
         Story story = new StoryDraftingService(reviewedScenes, pipelineEstimator).draftStory(draft.id, brief);
+        // El rótulo de lugar va por orden: las escenas de la Story salen en el mismo orden que las del borrador.
+        List<DraftScene> draftScenes = DraftRules.scenes(draft);
+        for (int i = 0; i < story.scenes().size() && i < draftScenes.size(); i++) {
+            story.scenes().get(i).setLocationLabel(draftScenes.get(i).locationLabel);
+        }
         return story.withHookText(draft.hookText);
     }
 

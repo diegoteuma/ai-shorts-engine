@@ -22,7 +22,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class StoryDraftEditApiTest extends DraftApiTestSupport {
 
     private static final String ID = "tunguska-x";
-    private static final String NEW_HOOK = "Una mañana algo estalló sobre Siberia y nadie supo jamás qué fue";
+    private static final String NEW_HOOK = "Algo estalló sobre Siberia y nadie supo jamás qué fue";
 
     @Test
     void edit_persistsTitleNarrationAndPrompt_recalculates_andApproveUsesTheEditedText() {
@@ -41,7 +41,7 @@ class StoryDraftEditApiTest extends DraftApiTestSupport {
         assertThat(stored.get("editedAt")).isNotNull();
         List<Map<String, Object>> scenes = (List<Map<String, Object>>) stored.get("scenes");
         assertThat(scenes.get(0).get("narrationText")).isEqualTo(NEW_HOOK);
-        assertThat(scenes.get(0).get("words")).isEqualTo(12);
+        assertThat(scenes.get(0).get("words")).isEqualTo(10);
         assertThat(scenes.get(3).get("visualPrompt")).isEqualTo(newPrompt);
         // NEW_HOOK dice "jamás": solo el aviso SOFT de absolutos, que no bloquea la aprobación de abajo.
         assertThat((List<Map<String, Object>>) stored.get("violations"))
@@ -138,6 +138,40 @@ class StoryDraftEditApiTest extends DraftApiTestSupport {
         assertThat(Files.readAllBytes(draftsDir().resolve(ID + ".json"))).isEqualTo(before);
 
         assertThat(patch("/story-drafts/no-existe", Map.of("title", "x")).getStatusCode().value()).isEqualTo(404);
+    }
+
+    @Test
+    void edit_locationLabel_isStored_canBeCleared_warnsWhenTooLongOrNotReal_andReachesTheStory() {
+        generate();
+
+        ResponseEntity<Map> set = patch(Map.of("locationEdits", List.of(
+                Map.of("sceneId", ID + "-gancho", "locationLabel", " SIBERIA · JUNIO 1908 "),
+                Map.of("sceneId", ID + "-contexto", "locationLabel", "TUNGUSKA, SIBERIA CENTRAL · 30 DE JUNIO DE 1908"),
+                Map.of("sceneId", ID + "-giro", "locationLabel", "UNA GRAN CIUDAD · HOY"))));
+        assertThat(set.getStatusCode().value()).as(String.valueOf(set.getBody())).isEqualTo(200);
+        List<Map<String, Object>> scenes = (List<Map<String, Object>>) set.getBody().get("scenes");
+        assertThat(scenes.get(0).get("locationLabel")).isEqualTo("SIBERIA · JUNIO 1908");
+        assertThat((List<Map<String, Object>>) set.getBody().get("violations"))
+                .extracting(v -> v.get("code") + "/" + v.get("severity") + "/" + v.get("sceneId"))
+                .containsExactlyInAnyOrder("LOCATION_LABEL_LENGTH/SOFT/" + ID + "-contexto",
+                        "LOCATION_LABEL_NOT_REAL/SOFT/" + ID + "-giro");
+
+        // Un texto vacío quita el rótulo; una escena inexistente es 400 y no cambia nada.
+        ResponseEntity<Map> cleared = patch(Map.of("locationEdits", List.of(
+                Map.of("sceneId", ID + "-contexto", "locationLabel", ""),
+                Map.of("sceneId", ID + "-giro", "locationLabel", "  "))));
+        assertThat((List<?>) cleared.getBody().get("violations")).isEmpty();
+        assertThat(patch(Map.of("locationEdits", List.of(Map.of("sceneId", "no-existe", "locationLabel", "X"))))
+                .getStatusCode().value()).isEqualTo(400);
+
+        // En la PUERTA 0 también se edita, y pasa a la Story.
+        ResponseEntity<Map> approved = post("/story-drafts/" + ID + "/decision", Map.of("decision", "APPROVE",
+                "acknowledgeUnverified", true,
+                "locationEdits", List.of(Map.of("sceneId", ID + "-contexto", "locationLabel", "RUSIA · 1908"))));
+        assertThat(approved.getStatusCode().value()).as(String.valueOf(approved.getBody())).isEqualTo(200);
+        List<Map<String, Object>> storyScenes = (List<Map<String, Object>>) getMap("/stories/" + ID).getBody().get("scenes");
+        assertThat(storyScenes).extracting(s -> s.get("locationLabel"))
+                .containsExactly("SIBERIA · JUNIO 1908", null, "RUSIA · 1908", null, null, null);
     }
 
     // --- helpers ---------------------------------------------------------------------------

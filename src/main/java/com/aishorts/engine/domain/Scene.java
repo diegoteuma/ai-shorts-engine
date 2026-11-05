@@ -61,6 +61,12 @@ public final class Scene {
      * lenta del modelo; se ajusta con POST /stories/{id}/clip-offsets.
      */
     private double clipStartOffset;
+    /**
+     * Rótulo de lugar y fecha que el video final muestra fijo durante toda la
+     * escena (p. ej. "JAPÓN · MAYO 1960"). Null = sin rótulo, como en las
+     * historias anteriores a este campo. Sale del borrador aprobado.
+     */
+    private String locationLabel;
 
     public Scene(String id, SceneRole role, int order, String narrationText, String visualPrompt, Duration targetDuration) {
         this.id = Objects.requireNonNull(id, "id");
@@ -277,6 +283,11 @@ public final class Scene {
         this.clipStartOffset = seconds;
     }
 
+    /** Fija el rótulo de lugar; null o en blanco = sin rótulo. No toca el estado de las puertas. */
+    public void setLocationLabel(String label) {
+        this.locationLabel = label == null || label.isBlank() ? null : label.strip();
+    }
+
     public boolean isReadyToGenerate() {
         return isCostApproved() && generationStatus == GenerationStatus.NOT_STARTED;
     }
@@ -369,7 +380,7 @@ public final class Scene {
                 generationStatus, higgsfieldRequestId, higgsfieldStatusUrl,
                 generatedAssetUrl, generationFailureReason,
                 localClipPath, localClipFailureReason,
-                clipStartOffset);
+                clipStartOffset, locationLabel);
     }
 
     /**
@@ -400,6 +411,7 @@ public final class Scene {
         scene.localClipPath = snapshot.localClipPath();
         scene.localClipFailureReason = snapshot.localClipFailureReason();
         scene.clipStartOffset = snapshot.clipStartOffset();
+        scene.locationLabel = snapshot.locationLabel();
         return scene;
     }
 
@@ -428,6 +440,7 @@ public final class Scene {
     public String localClipPath() { return localClipPath; }
     public String localClipFailureReason() { return localClipFailureReason; }
     public double clipStartOffset() { return clipStartOffset; }
+    public String locationLabel() { return locationLabel; }
 
     @Override
     public String toString() {

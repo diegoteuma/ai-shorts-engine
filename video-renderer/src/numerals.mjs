@@ -12,7 +12,12 @@
 //  - "un", "una", "uno" sueltos NUNCA se convierten (son artículos casi siempre); tampoco los dígitos 0-9 sueltos.
 //  - Una secuencia no gramatical ("cinco cinco", "treinta cinco") se deja tal cual.
 //  - Un año (4 cifras) se escribe sin separador. De 5 cifras en adelante se agrupa de a tres con espacio duro (U+00A0).
-// Limitaciones: solo cardinales en español; no convierte ordinales, fracciones ni decimales ("tres coma cinco").
+//    Las cifras de 4 dígitos que no son años ("mil seiscientos" muertos) también van sin separador ("1600"), como pide
+//    la RAE: distinguir un año de una cantidad necesitaría adivinar por el contexto, y un año con punto ("1.960") es peor.
+//  - Decimales: "<cardinal> coma <cardinal>" -> "X,Y" con coma decimal ("nueve coma cinco" -> "9,5"; "cero coma cero
+//    cinco" -> "0,05": cada "cero" inicial de la parte decimal es un 0). Se convierte aunque valga menos de 10, porque
+//    la coma hablada solo aparece en una cifra. Sin puntuación entre las palabras; "en coma" (el estado médico) no se toca.
+// Limitaciones: solo cardinales en español; no convierte ordinales ni fracciones ("tres cuartos").
 
 const UNITS = { uno: 1, un: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9 };
 const SPECIAL = {
@@ -93,6 +98,44 @@ export function formatNumber(value) {
 }
 
 /**
+ * Último índice del tramo de palabras numéricas que empieza en `i`: sin puntuación entre palabras; "y" solo entre
+ * decenas y unidades. `parts[i]` tiene que ser una palabra numérica.
+ */
+function runEnd(parts, i) {
+  let j = i;
+  while (j + 1 < parts.length) {
+    const cur = parts[j];
+    const nxt = parts[j + 1];
+    if (cur.trail !== "" || nxt.lead !== "") break;
+    if (isNumberWord(nxt.core)) {
+      j++;
+    } else if (nxt.core === "y" && cur.core in TENS && j + 2 < parts.length && parts[j + 2].core in UNITS && nxt.trail === "" && parts[j + 2].lead === "") {
+      j += 2; // incluye la "y" y la unidad
+    } else break;
+  }
+  return j;
+}
+
+/**
+ * Parte decimal que empieza en `k` (después de "coma"): ceros iniciales ("cero") y después, opcional, un cardinal.
+ * @returns {{ end: number, digits: string } | null} null si no es una parte decimal gramatical.
+ */
+function decimalPart(parts, k) {
+  if (k >= parts.length || parts[k].lead !== "" || !isNumberWord(parts[k].core)) return null;
+  const end = runEnd(parts, k);
+  const cores = parts.slice(k, end + 1).map((p) => p.core);
+  // "dos coma cinco mil" (2500? 2,5 mil?) es ambiguo: no se adivina, queda en palabras.
+  if (cores.includes("mil")) return null;
+  let zeros = 0;
+  while (zeros < cores.length && cores[zeros] === "cero") zeros++;
+  const rest = cores.slice(zeros);
+  if (rest.length === 0) return { end, digits: "0".repeat(zeros) };
+  const value = parseSpanishCardinal(rest);
+  if (value === null || value === 0) return null;
+  return { end, digits: "0".repeat(zeros) + String(value) };
+}
+
+/**
  * Convierte las cifras en palabras de UNA escena. `words`: [{ text, start, end, inferred }] ya alineadas.
  * @returns {{ words: object[], conversions: { from: string, to: string }[] }}
  */
@@ -111,20 +154,33 @@ export function convertNumerals(words, { mode = "auto" } = {}) {
       continue;
     }
     // Extender la secuencia: sin puntuación entre palabras; "y" solo entre decenas y unidades.
-    let j = i;
-    while (j + 1 < parts.length) {
-      const cur = parts[j];
-      const nxt = parts[j + 1];
-      if (cur.trail !== "" || nxt.lead !== "") break;
-      if (isNumberWord(nxt.core)) {
-        j++;
-      } else if (nxt.core === "y" && cur.core in TENS && j + 2 < parts.length && parts[j + 2].core in UNITS && nxt.trail === "" && parts[j + 2].lead === "") {
-        j += 2; // incluye la "y" y la unidad
-      } else break;
-    }
     // Un tramo no gramatical ("cinco cinco", "treinta cinco") se deja tal cual, entero.
-    const end = j;
+    const end = runEnd(parts, i);
     const value = parseSpanishCardinal(parts.slice(i, end + 1).map((p) => p.core));
+    // Decimal: "<cardinal> coma <parte decimal>" -> "X,Y", una sola palabra de subtítulo.
+    const coma = parts[end + 1];
+    if (value !== null && coma && coma.core === "coma" && parts[end].trail === "" && coma.lead === "" && coma.trail === "") {
+      const dec = decimalPart(parts, end + 2);
+      if (dec) {
+        const first = parts[i];
+        const last = parts[dec.end];
+        const text = `${first.lead}${formatNumber(value)},${dec.digits}${last.trail}`;
+        const span = parts.slice(i, dec.end + 1);
+        out.push({ ...first.w, text, start: first.w.start, end: last.w.end, inferred: span.some((p) => p.w.inferred) });
+        conversions.push({ from: span.map((p) => p.w.text).join(" "), to: text });
+        i = dec.end + 1;
+        continue;
+      }
+      // "<cifra> coma <palabras numéricas>" que no es un decimal válido: todo el tramo queda en palabras
+      // (convertir solo un pedazo daría "dos coma 5000").
+      const after = parts[end + 2];
+      if (after && after.lead === "" && isNumberWord(after.core)) {
+        const stop = runEnd(parts, end + 2);
+        for (let k = i; k <= stop; k++) out.push(parts[k].w);
+        i = stop + 1;
+        continue;
+      }
+    }
     if (value === null) {
       for (let k = i; k <= end; k++) out.push(parts[k].w);
       i = end + 1;
