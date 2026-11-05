@@ -212,8 +212,12 @@ POST /story-drafts/{id}/decision    PUERTA 0: {decision: APPROVE|REJECT, note?, 
   (2.65 palabras/s), `checks`, la fecha de consulta y el tier de cada fuente
   (por dominio, listas configurables; Wikipedia sirve para orientarse pero no
   cuenta). Una URL que no salió de la búsqueda deja la claim `SIN_VERIFICAR`;
-  una claim de las escenas 1-3 con menos de 2 fuentes A/B de dominios
-  distintos queda con confianza `BAJA`.
+  la confianza de cada claim de las escenas 1-3 se fija según sus fuentes
+  consultadas. Con 2 dominios A/B distintos queda la que dijo el modelo
+  (puede ser `ALTA`). Con 1 sola fuente tier A el tope es `MEDIA`. Sin
+  ninguna tier A y con menos de 2 tier B queda `BAJA` (aviso `WEAK_SOURCES`).
+  Las claims del GANCHO, que respaldan las primeras palabras y el
+  `hookText`, siguen exigiendo 2 dominios A/B: con menos quedan `BAJA`.
 - **Reglas duras** (bloquean la aprobación): 6 escenas GANCHO..CIERRE con
   order 1-6, slug válido y libre, id de escena `<slug>-<rol>`, 92-104 palabras,
   cada escena 3-8 s, claims referenciadas existentes (también las del
@@ -244,21 +248,72 @@ POST /story-drafts/{id}/decision    PUERTA 0: {decision: APPROVE|REJECT, note?, 
 
 **Costo**: la búsqueda web cuesta **10 USD por cada 1.000 búsquedas**, más
 los tokens normales (los resultados de búsqueda cuentan como tokens de
-entrada). Un borrador usa como máximo 10 búsquedas (≈ 0,10 USD) más tokens,
+entrada). Un borrador usa como máximo 4 búsquedas (≈ 0,04 USD) más tokens,
 y las propuestas como máximo 3. Cada borrador guarda su consumo real en
 `usage` (`inputTokens`, `outputTokens`, `webSearchRequests`).
+
+Lo caro no son las búsquedas sino los **tokens de entrada**. Cada búsqueda
+agrega una iteración al bucle de herramientas del servidor, y cada iteración
+vuelve a leer las reglas (~22 KB) más todos los resultados acumulados. Con el
+tope anterior de 10 búsquedas se midieron 331K y 722K tokens de entrada
+(~1,35 y ~2,07 USD por borrador). Por eso el tope por defecto ahora es 4.
+
+**Comparar versiones de la herramienta.** `web_search_20260318` (default) usa
+*filtrado dinámico*: Claude escribe y corre código que filtra los resultados
+antes de que entren al contexto. Eso baja los tokens por resultado, pero cada
+ejecución de código es un paso más del bucle (hubo 17 en un borrador medido).
+Según la documentación, la ejecución de código no se cobra aparte cuando va
+con la búsqueda web: solo cuentan sus tokens. **No está medido cuál de las
+dos versiones sale más barata.** Para comparar, generá el mismo tema una vez
+con cada valor y compará `estimatedCostUsd` y `usage` de los dos borradores:
+
+```
+CLAUDE_WEB_SEARCH_TOOL_VERSION=web_search_20250305   # búsqueda básica, sin filtrado dinámico
+CLAUDE_WEB_SEARCH_TOOL_VERSION=web_search_20260318   # con filtrado dinámico (default)
+```
+
+Según la documentación, el filtrado también se apaga sin cambiar de versión,
+con `allowed-callers: [direct]` en `app.drafts.web-search` de `application.yml`.
+
+**Costo por borrador** (`estimatedCostUsd`): se calcula desde `usage` con los
+precios de `app.drafts.pricing` (los de `claude-sonnet-5-5`, verificados en
+la página de precios de la documentación; revisalos si cambiás de modelo).
+Es una estimación local, no la factura. El log también muestra una línea
+`Costo estimado del borrador: X USD (...)`.
+
+**Caché de prompts** (`CLAUDE_DRAFT_PROMPT_CACHE`, activa por defecto): las
+reglas van con `cache_control: {type: "ephemeral"}`. Según la documentación,
+esa marca hace que, dentro de una misma request, las iteraciones del bucle de
+búsqueda lean de caché todo lo acumulado en vez de pagarlo entero de nuevo.
+En `usage` se ve así: `cacheCreationInputTokens` es lo escrito en caché
+(1,25x el precio de entrada), `cacheReadInputTokens` lo leído (0,05x en
+Sonnet 5.5), e `inputTokens` pasa a ser solo lo que no pasó por la caché.
+Por eso, con caché, `inputTokens` ya no se puede comparar directamente con
+los borradores de antes: compará `estimatedCostUsd`.
+
+**Esfuerzo** (`CLAUDE_DRAFT_EFFORT`): vacío por defecto, así que no se manda
+y queda el del modelo (`high` en Sonnet 5.5). Bajarlo puede abaratar el
+razonamiento, pero también empeorar la verificación de fuentes: medilo antes
+de dejarlo fijo.
 
 Variables de entorno nuevas (todas opcionales, con default):
 
 ```
 CLAUDE_MODEL                              claude-sonnet-5-5 (también lo usa POST /stories)
 CLAUDE_WEB_SEARCH_ENABLED                 true   (false: sin búsqueda; todas las fuentes quedan SIN_VERIFICAR)
-CLAUDE_WEB_SEARCH_MAX_USES                10     (tope de búsquedas por borrador)
+CLAUDE_WEB_SEARCH_MAX_USES                4      (tope de búsquedas por borrador; antes 10)
 CLAUDE_WEB_SEARCH_MAX_USES_PROPOSALS      3      (tope de búsquedas por pedido de propuestas)
 CLAUDE_WEB_SEARCH_TOOL_VERSION            web_search_20260318
 CLAUDE_WEB_SEARCH_FALLBACK_TOOL_VERSION   web_search_20250305 (se usa con allowed_callers [direct] si el modelo rechaza la anterior)
 CLAUDE_READ_TIMEOUT_SECONDS               180    (máximo sin recibir eventos del stream; no limita la duración total)
 CLAUDE_DRAFT_MAX_TOKENS                   64000  (tope de salida por llamada del borrador: thinking + texto juntos)
+CLAUDE_DRAFT_PROMPT_CACHE                 true   (cache_control ephemeral en las reglas; false = sin caché, como antes)
+CLAUDE_DRAFT_EFFORT                       vacío  (output_config.effort: low|medium|high|xhigh|max; vacío = default del modelo)
+CLAUDE_PRICE_INPUT_PER_MTOK               2      (precios de estimatedCostUsd, USD; los de claude-sonnet-5-5)
+CLAUDE_PRICE_OUTPUT_PER_MTOK              10
+CLAUDE_PRICE_SEARCH_PER_1000              10
+CLAUDE_PRICE_CACHE_WRITE_PER_MTOK         2.50   (escritura de caché de 5 minutos)
+CLAUDE_PRICE_CACHE_READ_PER_MTOK          0.10   (lectura de caché)
 DRAFTS_DIR                                ./data/drafts (ignorado por git)
 ```
 

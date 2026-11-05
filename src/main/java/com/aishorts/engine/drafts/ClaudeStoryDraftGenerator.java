@@ -5,13 +5,16 @@ import com.aishorts.engine.claude.ClaudeConfig;
 import com.aishorts.engine.claude.ClaudeHttpException;
 import com.aishorts.engine.claude.ClaudeStreamingClient;
 import com.anthropic.core.JsonValue;
+import com.anthropic.models.messages.CacheControlEphemeral;
 import com.anthropic.models.messages.Container;
 import com.anthropic.models.messages.ContentBlock;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.MessageParam;
+import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.ServerToolUsage;
 import com.anthropic.models.messages.StopReason;
+import com.anthropic.models.messages.TextBlockParam;
 import com.anthropic.models.messages.Usage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -125,8 +128,11 @@ public final class ClaudeStoryDraftGenerator implements StoryDraftGenerator, Aut
             MessageCreateParams.Builder params = MessageCreateParams.builder()
                     .model(config.model())
                     .maxTokens(maxTokens)
-                    .system(request.systemPrompt())
                     .addUserMessage(request.userMessage());
+            system(params, request.systemPrompt());
+            if (properties.effort() != null) {
+                params.outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.of(properties.effort())).build());
+            }
             if (!resendBlocks.isEmpty()) {
                 params.addMessage(MessageParam.builder()
                         .role(MessageParam.Role.ASSISTANT)
@@ -199,6 +205,27 @@ public final class ClaudeStoryDraftGenerator implements StoryDraftGenerator, Aut
         }
     }
 
+    /**
+     * Con app.drafts.prompt-cache, el sistema (las reglas) va como un bloque
+     * de texto con cache_control {type: ephemeral} (5 minutos). Esa marca,
+     * además de cachear las reglas, hace que la API ponga un punto de caché
+     * en cada resultado de búsqueda: las iteraciones siguientes del bucle de
+     * herramientas, dentro de la misma request, leen de caché el prefijo
+     * acumulado en vez de pagarlo entero otra vez (docs: tool-use-with-
+     * prompt-caching, "Server tool results are cached automatically"). Sin
+     * la marca, el sistema va como texto plano, como antes.
+     */
+    private void system(MessageCreateParams.Builder params, String systemPrompt) {
+        if (!properties.promptCache()) {
+            params.system(systemPrompt);
+            return;
+        }
+        params.systemOfTextBlockParams(List.of(TextBlockParam.builder()
+                .text(systemPrompt)
+                .cacheControl(CacheControlEphemeral.builder().build())
+                .build()));
+    }
+
     private static Map<String, Object> webSearchTool(String version, int maxUses, List<String> allowedCallers) {
         Map<String, Object> tool = new LinkedHashMap<>();
         tool.put("type", version);
@@ -214,7 +241,8 @@ public final class ClaudeStoryDraftGenerator implements StoryDraftGenerator, Aut
 
     private static DraftUsage usageOf(Usage usage) {
         long searches = usage.serverToolUse().map(ServerToolUsage::webSearchRequests).orElse(0L);
-        return new DraftUsage(usage.inputTokens(), usage.outputTokens(), searches);
+        return new DraftUsage(usage.inputTokens(), usage.outputTokens(), searches,
+                usage.cacheCreationInputTokens().orElse(0L), usage.cacheReadInputTokens().orElse(0L));
     }
 
     static boolean isWebSearchDisabled(String body) {

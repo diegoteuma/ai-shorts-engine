@@ -48,6 +48,12 @@ public final class StoryDraft {
     public List<Violation> violations = new ArrayList<>();
     public List<String> researchedUrls = new ArrayList<>();
     public DraftUsage usage = DraftUsage.ZERO;
+    /**
+     * Costo estimado en USD de todas las llamadas que produjeron el borrador
+     * (usage x app.drafts.pricing). Lo pone el servidor; null en borradores
+     * guardados antes de que existiera.
+     */
+    public Double estimatedCostUsd;
     /** Texto crudo de la última respuesta de Claude, solo cuando no se pudo leer como JSON (para diagnosticar). */
     public String unparsedResponse;
     /** Una entrada por intento (DRAFT y, si hubo, DRAFT_RETRY): cómo terminó, sin contenido. Lo pone el servidor. */

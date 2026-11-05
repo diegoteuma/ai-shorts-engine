@@ -31,6 +31,7 @@ public final class DraftRules {
     public static final String VERIFIED = "VERIFICADO";
     public static final String UNVERIFIED = "SIN_VERIFICAR";
     public static final String LOW_CONFIDENCE = "BAJA";
+    public static final String MEDIUM_CONFIDENCE = "MEDIA";
     public static final String HYPOTHESIS = "HIPOTESIS";
     public static final Set<String> REAL_CLAIM_TYPES = Set.of("HECHO", "ESTIMACION");
 
@@ -120,6 +121,52 @@ public final class DraftRules {
             }
         }
         return domains.size();
+    }
+
+    /**
+     * Ids de claims referenciados por la escena GANCHO: respaldan las
+     * primeras palabras de la narración y el hookText, así que son las
+     * únicas que siguen exigiendo 2 fuentes independientes tier A/B.
+     */
+    public static Set<String> hookClaimIds(StoryDraft draft) {
+        Set<String> ids = new HashSet<>();
+        for (DraftScene scene : scenes(draft)) {
+            if (roleOf(scene) == SceneRole.GANCHO) {
+                ids.addAll(claimIds(scene));
+            }
+        }
+        return ids;
+    }
+
+    /** true si al menos una fuente tier A de la claim apareció en la búsqueda. */
+    public static boolean hasResearchedTierA(Claim claim, Set<String> canonicalResearched, SourcePolicy policy) {
+        return sources(claim).stream().anyMatch(s -> s != null && isResearched(s.url, canonicalResearched)
+                && SourcePolicy.TIER_A.equals(policy.tierOf(s.url)));
+    }
+
+    /** Respaldo de una claim de las escenas REAL, contando solo fuentes que aparecieron en la búsqueda. */
+    public enum SourceStrength {
+        /** 2 o más dominios independientes tier A/B: admite confianza ALTA. */
+        STRONG,
+        /** Menos de 2 dominios A/B, pero al menos una fuente tier A: alcanza para confianza MEDIA (salvo en el GANCHO). */
+        SINGLE_TIER_A,
+        /** Ninguna tier A y menos de 2 tier B: confianza BAJA. */
+        WEAK
+    }
+
+    public static SourceStrength sourceStrength(Claim claim, Set<String> canonicalResearched, SourcePolicy policy) {
+        if (independentTierABDomains(claim, canonicalResearched, policy) >= 2) {
+            return SourceStrength.STRONG;
+        }
+        return hasResearchedTierA(claim, canonicalResearched, policy) ? SourceStrength.SINGLE_TIER_A : SourceStrength.WEAK;
+    }
+
+    /**
+     * Si el respaldo obliga a confianza BAJA: sin ninguna tier A y con menos
+     * de 2 tier B, o, en una claim del GANCHO, con menos de 2 dominios A/B.
+     */
+    public static boolean forcesLowConfidence(SourceStrength strength, boolean hookClaim) {
+        return strength == SourceStrength.WEAK || (hookClaim && strength == SourceStrength.SINGLE_TIER_A);
     }
 
     /** true si la claim tiene fuentes y todas son de dominios solo de orientación (Wikipedia). */

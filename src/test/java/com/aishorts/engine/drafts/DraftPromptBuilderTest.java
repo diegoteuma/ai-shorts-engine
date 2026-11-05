@@ -34,6 +34,16 @@ class DraftPromptBuilderTest {
     }
 
     @Test
+    void webSearchDefaults_fourSearchesPerDraft_andTheToolVersionUnchanged() {
+        // Sin CLAUDE_WEB_SEARCH_MAX_USES ni CLAUDE_WEB_SEARCH_TOOL_VERSION: los defaults de application.yml.
+        DraftsProperties.WebSearch webSearch = DraftFixtures.properties().webSearch();
+        assertThat(webSearch.maxUsesDraft()).isEqualTo(4);
+        assertThat(webSearch.maxUsesProposals()).isEqualTo(3);
+        assertThat(webSearch.toolVersion()).isEqualTo("web_search_20260318");
+        assertThat(webSearch.fallbackToolVersion()).isEqualTo("web_search_20250305");
+    }
+
+    @Test
     void slugs_andFreeIds_stayValidAndWithin40Chars() {
         assertThat(DraftText.slugify("¡Erupción del Tambora (1815)!")).isEqualTo("erupcion-del-tambora-1815");
         assertThat(DraftText.slugify("   ")).isEqualTo("historia");

@@ -349,6 +349,7 @@ public final class DraftValidator {
 
     private void validateSources(StoryDraft draft, Set<String> researched, List<Violation> violations) {
         Set<String> realClaimIds = DraftRules.realClaimIds(draft);
+        Set<String> hookClaimIds = DraftRules.hookClaimIds(draft);
         for (Claim claim : DraftRules.claims(draft)) {
             String claimId = claim != null ? claim.id : null;
             try {
@@ -366,11 +367,16 @@ public final class DraftValidator {
                                 + " (claim '" + claimId + "') no está en las listas de tier A ni B."));
                     }
                 }
-                if (realClaimIds.contains(claimId)
-                        && DraftRules.independentTierABDomains(claim, researched, sourcePolicy) < 2) {
+                // Sección 6: 1 fuente tier A alcanza (MEDIA, sin aviso); avisa con 0 tier A y < 2 tier B,
+                // y en las claims del GANCHO con < 2 dominios A/B (el gancho sigue exigiendo 2).
+                boolean hookClaim = hookClaimIds.contains(claimId);
+                if (realClaimIds.contains(claimId) && DraftRules.forcesLowConfidence(
+                        DraftRules.sourceStrength(claim, researched, sourcePolicy), hookClaim)) {
                     String reason = DraftRules.onlyOrientationSources(claim, sourcePolicy)
                             ? "solo está respaldada por Wikipedia"
-                            : "tiene menos de 2 fuentes tier A/B consultadas de dominios distintos";
+                            : hookClaim
+                            ? "tiene menos de 2 fuentes tier A/B consultadas de dominios distintos (la claim del GANCHO exige 2)"
+                            : "no tiene ninguna fuente tier A consultada y tiene menos de 2 tier B de dominios distintos";
                     violations.add(Violation.softClaim("WEAK_SOURCES", claimId, "La claim '" + claimId + "' " + reason
                             + ": confianza forzada a BAJA."));
                 }

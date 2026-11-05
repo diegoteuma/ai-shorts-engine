@@ -139,11 +139,17 @@ app:
       enabled: ${CLAUDE_WEB_SEARCH_ENABLED:true}
       # web_search_20260318 usa filtrado dinámico (code execution) por
       # defecto. Si el modelo la rechaza, se reintenta una vez con
-      # fallback-tool-version y allowed_callers [direct].
+      # fallback-tool-version y allowed_callers [direct]. Para comparar costos
+      # sin filtrado dinámico: CLAUDE_WEB_SEARCH_TOOL_VERSION=web_search_20250305
+      # (ver README; no está medido cuál sale más barata).
       tool-version: ${CLAUDE_WEB_SEARCH_TOOL_VERSION:web_search_20260318}
       allowed-callers: []
       fallback-tool-version: ${CLAUDE_WEB_SEARCH_FALLBACK_TOOL_VERSION:web_search_20250305}
-      max-uses-draft: ${CLAUDE_WEB_SEARCH_MAX_USES:10}
+      # 4 (antes 10): cada búsqueda suma iteraciones al bucle de herramientas del servidor,
+      # y cada iteración vuelve a leer las reglas y todos los resultados acumulados. El costo
+      # lo dominan los input tokens (331K-722K medidos con 10). La sección 6 de las reglas
+      # pide 1-2 búsquedas para el evento, 1 para el gancho y 1 para el detalle humano.
+      max-uses-draft: ${CLAUDE_WEB_SEARCH_MAX_USES:4}
       max-uses-proposals: ${CLAUDE_WEB_SEARCH_MAX_USES_PROPOSALS:3}
     # Las llamadas van con streaming: este es el tiempo máximo SIN recibir
     # ningún evento (ni ping) y el de espera de los headers. No limita la
@@ -156,6 +162,29 @@ app:
     # 16000 una respuesta puede quedar entera en thinking y llegar sin texto (stop_reason
     # max_tokens; así lo advierte la guía de migración de la API). 64000 es lo recomendado con streaming; el máximo del modelo es 128000.
     max-tokens: ${CLAUDE_DRAFT_MAX_TOKENS:64000}
+    # Caché de prompts: cache_control {type: ephemeral} (5 minutos) en el bloque de sistema (las
+    # reglas). Según la documentación (agents-and-tools/tool-use/tool-use-with-prompt-caching,
+    # "Server tool results are cached automatically"), si la request tiene al menos un cache_control,
+    # la API pone también un punto de caché en cada resultado de herramienta del servidor y las
+    # iteraciones siguientes de la MISMA request leen el prefijo de caché. En usage se ve como
+    # cache_creation_input_tokens (escrito, 1,25x) y cache_read_input_tokens (leído, 0,05x en
+    # Sonnet 5.5); input_tokens pasa a ser solo lo no cacheado. false = como antes, sin caché.
+    prompt-cache: ${CLAUDE_DRAFT_PROMPT_CACHE:true}
+    # output_config.effort: low | medium | high | xhigh | max. Vacío (default) = no se manda y aplica
+    # el default del modelo (high en claude-sonnet-5-5, según build-with-claude/effort). Bajarlo
+    # puede empeorar la verificación de fuentes: medirlo antes de dejarlo fijo.
+    effort: ${CLAUDE_DRAFT_EFFORT:}
+    # Precios para estimatedCostUsd del borrador (USD). Son los de claude-sonnet-5-5 en
+    # platform.claude.com/docs/en/about-claude/pricing, verificados el 2026-11-04: entrada 2,
+    # salida 10, escritura de caché de 5 min 2,50 y lectura de caché 0,10 por MTok, y búsqueda
+    # web 10 por cada 1.000. VERIFICAR en docs.claude.com/pricing si cambian el modelo o los
+    # precios. La ejecución de código que usa el filtrado dinámico no se cobra aparte (misma página).
+    pricing:
+      input-per-mtok: ${CLAUDE_PRICE_INPUT_PER_MTOK:2}
+      output-per-mtok: ${CLAUDE_PRICE_OUTPUT_PER_MTOK:10}
+      search-per-1000: ${CLAUDE_PRICE_SEARCH_PER_1000:10}
+      cache-write-per-mtok: ${CLAUDE_PRICE_CACHE_WRITE_PER_MTOK:2.50}
+      cache-read-per-mtok: ${CLAUDE_PRICE_CACHE_READ_PER_MTOK:0.10}
     words-per-second: 2.65
     min-total-words: 92
     max-total-words: 104

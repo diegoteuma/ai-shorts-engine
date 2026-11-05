@@ -92,7 +92,10 @@ class StoryDraftGenerationApiTest extends DraftApiTestSupport {
         assertThat(body.get("attempts")).isEqualTo(1);
         assertThat((List<?>) body.get("violations")).isEmpty();
         assertThat(body.get("researchedUrls")).isEqualTo(RESEARCHED);
-        assertThat(body.get("usage")).isEqualTo(Map.of("inputTokens", 1000, "outputTokens", 500, "webSearchRequests", 2));
+        assertThat(body.get("usage")).isEqualTo(Map.of("inputTokens", 1000, "outputTokens", 500, "webSearchRequests", 2,
+                "cacheCreationInputTokens", 0, "cacheReadInputTokens", 0));
+        // 1000 x 2 + 500 x 10 por MTok + 2 búsquedas x 10 / 1000 = 0,002 + 0,005 + 0,02
+        assertThat(((Number) body.get("estimatedCostUsd")).doubleValue()).isEqualTo(0.027);
 
         // words/checks del modelo (99 y totalWords 1) ignorados y recalculados
         List<Map<String, Object>> scenes = (List<Map<String, Object>>) body.get("scenes");
@@ -109,7 +112,7 @@ class StoryDraftGenerationApiTest extends DraftApiTestSupport {
         assertThat(fake.requests()).hasSize(1);
         assertThat(request.mode()).isEqualTo(Mode.DRAFT);
         assertThat(request.webSearch()).isTrue();
-        assertThat(request.maxSearchUses()).isEqualTo(10);
+        assertThat(request.maxSearchUses()).isEqualTo(4);   // default de CLAUDE_WEB_SEARCH_MAX_USES (antes 10)
         assertThat(request.systemPrompt()).startsWith("# INSTRUCCIONES PARA LA IA: generador de historias")
                 .contains("Modo: BORRADOR").contains("Fecha de hoy: 2026-10-06").contains("Tienes búsqueda web");
         assertThat(request.userMessage()).contains("Tema elegido: Tunguska");
@@ -148,7 +151,8 @@ class StoryDraftGenerationApiTest extends DraftApiTestSupport {
         assertThat((List<?>) body.get("violations")).isEmpty();
         assertThat(body.get("researchedUrls")).isEqualTo(RESEARCHED);
         assertThat(((Map<String, Object>) body.get("checks")).get("sourcesVerified")).isEqualTo(true);
-        assertThat(body.get("usage")).isEqualTo(Map.of("inputTokens", 2000, "outputTokens", 1000, "webSearchRequests", 2));
+        assertThat(body.get("usage")).isEqualTo(Map.of("inputTokens", 2000, "outputTokens", 1000, "webSearchRequests", 2,
+                "cacheCreationInputTokens", 0, "cacheReadInputTokens", 0));
 
         assertThat(fake.requests()).hasSize(2);
         GeneratorRequest retry = fake.requests().get(1);
@@ -192,6 +196,8 @@ class StoryDraftGenerationApiTest extends DraftApiTestSupport {
         Map<String, Object> body = response.getBody();
         assertThat(body.get("attempts")).isEqualTo(1);
         assertThat(fake.requests()).hasSize(1); // sin reintento
+        // un intento fallido también cuesta: 208920 x 2 + 16000 x 10 por MTok + 10 búsquedas = 0,4178 + 0,16 + 0,1
+        assertThat(((Number) body.get("estimatedCostUsd")).doubleValue()).isEqualTo(0.6778);
         List<Map<String, Object>> violations = (List<Map<String, Object>>) body.get("violations");
         assertThat(violations).filteredOn(v -> "HARD".equals(v.get("severity")))
                 .extracting(v -> v.get("code")).containsExactly("RESPONSE_EMPTY");
@@ -199,7 +205,8 @@ class StoryDraftGenerationApiTest extends DraftApiTestSupport {
         assertThat((String) violations.get(0).get("message"))
                 .contains("sin texto", "stop_reason=end_turn", "thinking=4", "16000 tokens de salida");
         assertThat(body.get("unparsedResponse")).isNull();
-        assertThat(body.get("usage")).isEqualTo(Map.of("inputTokens", 208920, "outputTokens", 16000, "webSearchRequests", 10));
+        assertThat(body.get("usage")).isEqualTo(Map.of("inputTokens", 208920, "outputTokens", 16000, "webSearchRequests", 10,
+                "cacheCreationInputTokens", 0, "cacheReadInputTokens", 0));
         assertThat(body.get("generationAttempts")).isEqualTo(List.of(Map.of("mode", "DRAFT", "stopReason", "end_turn", "calls", 3,
                 "blockCounts", Map.of("thinking", 4, "server_tool_use", 10, "web_search_tool_result", 10))));
     }

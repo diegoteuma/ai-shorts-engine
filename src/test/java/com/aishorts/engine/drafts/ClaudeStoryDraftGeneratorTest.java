@@ -178,6 +178,72 @@ class ClaudeStoryDraftGeneratorTest {
     }
 
     /** Todo lo que trae {@code original} está en {@code resent} con el mismo valor (puede haber campos de más). */
+    @Test
+    void usage_includesTheCacheFieldsWhenTheResponseHasThem_andAddsThemAcrossPauseTurns() {
+        respond(200, """
+                {"stop_reason":"pause_turn",
+                 "usage":{"input_tokens":120,"output_tokens":10,"cache_creation_input_tokens":6000,"cache_read_input_tokens":0,
+                          "server_tool_use":{"web_search_requests":1}},
+                 "content":[{"type":"text","text":"Busco. "}]}""");
+        respond(200, """
+                {"stop_reason":"end_turn",
+                 "usage":{"input_tokens":80,"output_tokens":40,"cache_creation_input_tokens":3000,"cache_read_input_tokens":25000,
+                          "server_tool_use":{"web_search_requests":2}},
+                 "content":[{"type":"text","text":"{}"}]}""");
+
+        GeneratorResult result = generator().generate(draftRequest());
+
+        assertThat(result.usage()).isEqualTo(new DraftUsage(200, 50, 3, 9000, 25000));
+    }
+
+    // --- incremento D: caché de prompts y esfuerzo -----------------------------------------
+
+    @Test
+    void promptCacheOnByDefault_systemGoesAsOneTextBlockWithEphemeralCacheControl_alsoOnContinuations() {
+        respond(200, """
+                {"stop_reason":"pause_turn","usage":{"input_tokens":1,"output_tokens":1},"content":[{"type":"text","text":"a"}]}""");
+        respond(200, """
+                {"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1},"content":[{"type":"text","text":"{}"}]}""");
+
+        generator().generate(draftRequest());
+
+        List<Map<String, Object>> expected = List.of(Map.of("type", "text", "text", "reglas",
+                "cache_control", Map.of("type", "ephemeral")));
+        assertThat(receivedRequests).hasSize(2);
+        for (Map<String, Object> request : receivedRequests) {
+            assertThat(request.get("system")).isEqualTo(expected);
+            // effort vacío por defecto: no se manda output_config (default del modelo, como antes)
+            assertThat(request).doesNotContainKey("output_config");
+        }
+    }
+
+    @Test
+    void promptCacheOff_systemGoesAsPlainText_likeBefore() {
+        respond(200, """
+                {"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1},"content":[{"type":"text","text":"{}"}]}""");
+
+        generator(DraftFixtures.properties(Map.of("CLAUDE_DRAFT_PROMPT_CACHE", "false"))).generate(draftRequest());
+
+        assertThat(receivedRequests.get(0).get("system")).isEqualTo("reglas");
+    }
+
+    @Test
+    void effortConfigured_goesAsOutputConfigEffort() {
+        respond(200, """
+                {"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1},"content":[{"type":"text","text":"{}"}]}""");
+
+        generator(DraftFixtures.properties(Map.of("CLAUDE_DRAFT_EFFORT", "medium"))).generate(draftRequest());
+
+        assertThat(receivedRequests.get(0).get("output_config")).isEqualTo(Map.of("effort", "medium"));
+    }
+
+    @Test
+    void usage_withoutCacheFields_hasZerosInThem() {
+        respond(200, """
+                {"stop_reason":"end_turn","usage":{"input_tokens":100,"output_tokens":5},"content":[{"type":"text","text":"{}"}]}""");
+        assertThat(generator().generate(draftRequest()).usage()).isEqualTo(new DraftUsage(100, 5, 0, 0, 0));
+    }
+
     private static void assertKeptIntact(Object original, Object resent, String path) {
         if (original instanceof Map<?, ?> o) {
             assertThat(resent).as(path).isInstanceOf(Map.class);
@@ -303,7 +369,8 @@ class ClaudeStoryDraftGeneratorTest {
         return new DraftsProperties(p.dir(), p.rulesResource(), p.webSearch(), seconds, p.maxPauseContinuations(), p.maxTokens(),
                 p.wordsPerSecond(), p.minTotalWords(), p.maxTotalWords(), p.minSceneSeconds(), p.maxSceneSeconds(),
                 p.sceneWordRanges(), p.styleAnchor(), p.forbiddenVisualTerms(), p.negativePromptTerms(),
-                p.slowRevealTerms(), p.hookAftermathTerms(), p.absoluteTerms(), p.calmVisualTerms(), p.humanScaleTerms(), p.tierADomains(), p.tierBDomains(), p.orientationOnlyDomains());
+                p.slowRevealTerms(), p.hookAftermathTerms(), p.absoluteTerms(), p.calmVisualTerms(), p.humanScaleTerms(), p.tierADomains(), p.tierBDomains(), p.orientationOnlyDomains(),
+                p.pricing(), p.promptCache(), p.effort());
     }
 
     @Test

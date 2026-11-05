@@ -6,6 +6,7 @@ import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.bind.PropertySourcesPlaceholdersResolver;
 import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
 import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.ClassPathResource;
 
@@ -43,9 +44,19 @@ final class DraftFixtures {
 
     /** Las propiedades reales de application.yml (app.drafts), para que los tests usen la misma configuración. */
     static DraftsProperties properties() {
+        return properties(Map.of());
+    }
+
+    /**
+     * Las mismas propiedades, con variables de entorno simuladas (por
+     * ejemplo CLAUDE_DRAFT_PROMPT_CACHE=false): resuelven los placeholders
+     * ${VARIABLE:default} de application.yml como en producción.
+     */
+    static DraftsProperties properties(Map<String, Object> environment) {
         try {
-            List<PropertySource<?>> sources = new YamlPropertySourceLoader()
-                    .load("application.yml", new ClassPathResource("application.yml"));
+            List<PropertySource<?>> sources = new ArrayList<>();
+            sources.add(new MapPropertySource("entorno-del-test", environment));
+            sources.addAll(new YamlPropertySourceLoader().load("application.yml", new ClassPathResource("application.yml")));
             Binder binder = new Binder(ConfigurationPropertySources.from(sources), new PropertySourcesPlaceholdersResolver(sources));
             return binder.bind("app.drafts", DraftsProperties.class).get();
         } catch (IOException e) {

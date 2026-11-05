@@ -34,8 +34,29 @@ public record DraftsProperties(
         List<String> humanScaleTerms,
         List<String> tierADomains,
         List<String> tierBDomains,
-        List<String> orientationOnlyDomains
+        List<String> orientationOnlyDomains,
+        Pricing pricing,
+        boolean promptCache,
+        String effort
 ) {
+
+    /** Niveles de output_config.effort que acepta la API (docs: build-with-claude/effort). */
+    public static final List<String> EFFORT_LEVELS = List.of("low", "medium", "high", "xhigh", "max");
+
+    /**
+     * Precios en USD para estimar el costo de un borrador desde su usage:
+     * por millón de tokens (entrada sin caché, salida, escritura y lectura
+     * de caché) y por cada 1.000 búsquedas web.
+     */
+    public record Pricing(
+            double inputPerMtok,
+            double outputPerMtok,
+            double searchPer1000,
+            double cacheWritePerMtok,
+            double cacheReadPerMtok
+    ) {
+        public static final Pricing NONE = new Pricing(0, 0, 0, 0, 0);
+    }
 
     public record WebSearch(
             boolean enabled,
@@ -65,5 +86,12 @@ public record DraftsProperties(
         tierADomains = tierADomains != null ? tierADomains : List.of();
         tierBDomains = tierBDomains != null ? tierBDomains : List.of();
         orientationOnlyDomains = orientationOnlyDomains != null ? orientationOnlyDomains : List.of();
+        pricing = pricing != null ? pricing : Pricing.NONE;
+        // vacío = no se manda output_config.effort (el default del modelo, como hasta ahora)
+        effort = effort == null || effort.isBlank() ? null : effort.trim().toLowerCase(java.util.Locale.ROOT);
+        if (effort != null && !EFFORT_LEVELS.contains(effort)) {
+            throw new IllegalArgumentException("app.drafts.effort (CLAUDE_DRAFT_EFFORT) es '" + effort
+                    + "'; los valores válidos son " + EFFORT_LEVELS + " o vacío (default del modelo).");
+        }
     }
 }
